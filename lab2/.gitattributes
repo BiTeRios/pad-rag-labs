@@ -1,0 +1,3 @@
+# Скрипты исполняются в Linux-контейнерах: только LF
+*.sh text eol=lf
+Dockerfile text eol=lf

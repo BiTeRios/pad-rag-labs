@@ -1,0 +1,13 @@
+# Контекст сборки — корень lab2: в образ не попадают окружение, кэши, тесты и секреты
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/tests
+**/.env
+**/*.egg-info
+docs
+tests
+infrastructure
+**/*.md
+.git

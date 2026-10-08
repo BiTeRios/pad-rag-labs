@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rag-common"
+version = "0.1.0"
+description = "Сквозной код сервисов Lab2: JSON-логи с request_id, ошибки, health/ready, auth, HTTP-клиент, события RabbitMQ"
+requires-python = ">=3.12"
+# Версии закреплены в requirements.txt каждого сервиса; здесь только список.
+dependencies = ["fastapi", "httpx", "aio-pika", "pydantic-settings", "pyjwt", "sqlalchemy"]
+
+[tool.setuptools.packages.find]
+include = ["rag_common*"]

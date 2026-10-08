@@ -1,0 +1,12 @@
+# Локальная разработка и тесты всех сервисов (кроме весов моделей inference: тесты их не требуют)
+-e libs/common
+-r services/auth-service/requirements.txt
+-r services/ingestion-service/requirements.txt
+-r services/indexing-service/requirements.txt
+-r services/retrieval-service/requirements.txt
+-r services/chat-service/requirements.txt
+-r services/analytics-service/requirements.txt
+-r gateway/requirements.txt
+aiosqlite==0.22.1
+pytest==9.1.1
+pytest-asyncio==1.4.0
