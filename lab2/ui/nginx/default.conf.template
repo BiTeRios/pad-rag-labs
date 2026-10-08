@@ -1,0 +1,33 @@
+# UI: nginx отдаёт статику и проксирует /api/* на gateway. Браузер видит один origin, поэтому CORS не нужен.
+# Шаблон обрабатывается envsubst при старте контейнера (образ nginx): ${GATEWAY_URL} — адрес gateway без
+# завершающего «/», например http://gateway:8000 (Compose и Kubernetes) или http://host.docker.internal:8000.
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    server_tokens off;
+
+    # Чужие скрипты, стили и фреймы запрещены: страница грузит только свои файлы и ходит только в свой /api
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location /api/ {
+        proxy_pass ${GATEWAY_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_read_timeout 200s;        # /api/chat/ask: gateway ждёт ответ до 180 с (LLM, reranker на CPU)
+        client_max_body_size 1m;
+    }
+
+    location / {
+        try_files $uri /index.html;
+        expires -1;                     # Cache-Control: no-cache — после обновления образа браузер берёт новые файлы
+    }
+}
