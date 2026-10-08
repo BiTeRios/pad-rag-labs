@@ -1,0 +1,202 @@
+# Lab2: 7 сервисов + gateway + PostgreSQL, RabbitMQ, Qdrant.
+# Запуск: cp .env.example .env (задать пароли) → docker compose up --build
+# Снаружи открыты только gateway (8000) и консоль RabbitMQ (15672); остальное — во внутренней сети.
+# LLM — Ollama на хосте (GPU): из контейнеров доступна как host.docker.internal:11434.
+
+name: rag-lab2
+
+x-service: &service
+  restart: unless-stopped
+  extra_hosts: ["host.docker.internal:host-gateway"]  # Linux: имя хоста как в Docker Desktop
+
+x-env: &env
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:-rag}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD в .env}@rabbitmq:5672/
+
+x-depends-infra: &infra
+  postgres: {condition: service_healthy}
+  rabbitmq: {condition: service_healthy}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?}
+      INGESTION_DB_PASSWORD: ${INGESTION_DB_PASSWORD:?}
+      CHAT_DB_PASSWORD: ${CHAT_DB_PASSWORD:?}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD:?}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4.3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-rag}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?}
+    ports: ["15672:15672"]  # консоль: очереди, сообщения, dead letter
+    volumes: [rabbitmq-data:/var/lib/rabbitmq]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    volumes: [qdrant-data:/qdrant/storage]
+    healthcheck:  # в образе нет curl: проверяем, что порт принимает соединения
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  auth-service:
+    <<: *service
+    build: {context: ., dockerfile: services/auth-service/Dockerfile}
+    image: rag/auth-service:${IMAGE_TAG:-1.0.0}  # тот же тег, что в Kubernetes (lab3/k8s)
+    environment:
+      <<: *env
+      PORT: 8001
+      DATABASE_URL: postgresql+asyncpg://auth:${AUTH_DB_PASSWORD}@postgres:5432/auth
+      JWT_SECRET: ${JWT_SECRET:?задайте JWT_SECRET (≥ 32 символа) в .env}
+      TOKEN_TTL_MINUTES: ${TOKEN_TTL_MINUTES:-60}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?}
+    depends_on: *infra
+    healthcheck: &ready
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ[\"PORT\"]}/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  ingestion-service:
+    <<: *service
+    build: {context: ., dockerfile: services/ingestion-service/Dockerfile}
+    image: rag/ingestion-service:${IMAGE_TAG:-1.0.0}  # тот же тег, что в Kubernetes (lab3/k8s)
+    environment:
+      <<: *env
+      PORT: 8002
+      DATABASE_URL: postgresql+asyncpg://ingestion:${INGESTION_DB_PASSWORD}@postgres:5432/ingestion
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      FETCH_LIMIT: ${FETCH_LIMIT:-0}
+      EVENT_BATCH_SIZE: ${EVENT_BATCH_SIZE:-50}
+      SYNC_INTERVAL_MINUTES: ${SYNC_INTERVAL_MINUTES:-0}
+    depends_on: *infra
+    healthcheck: *ready
+
+  inference-service:
+    <<: *service
+    build: {context: ., dockerfile: services/inference-service/Dockerfile}
+    image: rag/inference-service:${IMAGE_TAG:-1.0.0}  # тот же тег, что в Kubernetes (lab3/k8s)
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PORT: 8003
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+      RERANKER_ENABLED: ${RERANKER_ENABLED:-true}
+    volumes:
+      # Кэш весов (~3.4 ГБ): по умолчанию том; HF_CACHE=<путь к ~/.cache/huggingface> — взять уже скачанные
+      - ${HF_CACHE:-models}:/models
+    healthcheck:
+      <<: *ready
+      start_period: 900s  # первый запуск скачивает модели
+    deploy:
+      resources:
+        limits: {memory: 6g}
+
+  indexing-service:
+    <<: *service
+    build: {context: ., dockerfile: services/indexing-service/Dockerfile}
+    image: rag/indexing-service:${IMAGE_TAG:-1.0.0}  # тот же тег, что в Kubernetes (lab3/k8s)
+    environment:
+      <<: *env
+      PORT: 8004
+      QDRANT_URL: http://qdrant:6333
+      INGESTION_URL: http://ingestion-service:8002
+      INFERENCE_URL: http://inference-service:8003
+    depends_on:
+      <<: *infra
+      qdrant: {condition: service_healthy}
+      ingestion-service: {condition: service_healthy}
+      inference-service: {condition: service_started}
+    healthcheck:
+      <<: *ready
+      start_period: 900s  # готов, когда inference загрузил модели
+
+  retrieval-service:
+    <<: *service
+    build: {context: ., dockerfile: services/retrieval-service/Dockerfile}
+    image: rag/retrieval-service:${IMAGE_TAG:-1.0.0}  # тот же тег, что в Kubernetes (lab3/k8s)
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PORT: 8005
+      INDEXING_URL: http://indexing-service:8004
+      INFERENCE_URL: http://inference-service:8003
+    depends_on:
+      indexing-service: {condition: service_started}
+    healthcheck: *ready
+
+  chat-service:
+    <<: *service
+    build: {context: ., dockerfile: services/chat-service/Dockerfile}
+    image: rag/chat-service:${IMAGE_TAG:-1.0.0}  # тот же тег, что в Kubernetes (lab3/k8s)
+    environment:
+      <<: *env
+      PORT: 8006
+      DATABASE_URL: postgresql+asyncpg://chat:${CHAT_DB_PASSWORD}@postgres:5432/chat
+      RETRIEVAL_URL: http://retrieval-service:8005
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+    depends_on: *infra
+    healthcheck: *ready
+
+  analytics-service:
+    <<: *service
+    build: {context: ., dockerfile: services/analytics-service/Dockerfile}
+    image: rag/analytics-service:${IMAGE_TAG:-1.0.0}  # тот же тег, что в Kubernetes (lab3/k8s)
+    environment:
+      <<: *env
+      PORT: 8007
+      DATABASE_URL: postgresql+asyncpg://analytics:${ANALYTICS_DB_PASSWORD}@postgres:5432/analytics
+    depends_on: *infra
+    healthcheck: *ready
+
+  gateway:
+    <<: *service
+    build: {context: ., dockerfile: gateway/Dockerfile}
+    image: rag/gateway:${IMAGE_TAG:-1.0.0}  # тот же тег, что в Kubernetes (lab3/k8s)
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PORT: 8000
+      JWT_SECRET: ${JWT_SECRET}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}
+      AUTH_URL: http://auth-service:8001
+      INGESTION_URL: http://ingestion-service:8002
+      INFERENCE_URL: http://inference-service:8003
+      INDEXING_URL: http://indexing-service:8004
+      RETRIEVAL_URL: http://retrieval-service:8005
+      CHAT_URL: http://chat-service:8006
+      ANALYTICS_URL: http://analytics-service:8007
+    ports: ["8000:8000"]
+    depends_on:
+      auth-service: {condition: service_healthy}
+    healthcheck:
+      <<: *ready
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
+  qdrant-data:
+  models:
