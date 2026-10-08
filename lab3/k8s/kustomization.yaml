@@ -31,6 +31,7 @@ resources:
   - deployments/chat-service.yaml
   - deployments/analytics-service.yaml
   - deployments/gateway.yaml
+  - deployments/web.yaml
   - services/auth-service.yaml
   - services/ingestion-service.yaml
   - services/inference-service.yaml
@@ -39,3 +40,4 @@ resources:
   - services/chat-service.yaml
   - services/analytics-service.yaml
   - services/gateway.yaml
+  - services/web.yaml

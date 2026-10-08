@@ -1,11 +1,12 @@
 """Сборка образов сервисов Lab2 и загрузка их в Minikube.
 
-    python docker/build_images.py                          # docker build + minikube image load (все 8 образов)
+    python docker/build_images.py                          # docker build + minikube image load (все 9 образов)
     python docker/build_images.py auth-service gateway     # выборочно
     python docker/build_images.py --no-load                # только собрать (Docker Compose или свой registry)
 
-Dockerfile лежит у каждого сервиса в Lab2 (services/<name>/Dockerfile, gateway/Dockerfile); контекст сборки —
-корень lab2 (нужна общая библиотека libs/common, лишнее отсекает lab2/.dockerignore).
+Dockerfile лежит у каждого сервиса в Lab2 (services/<name>/Dockerfile, gateway/Dockerfile, ui/Dockerfile).
+Контекст сборки Python-сервисов — корень lab2 (нужна общая библиотека libs/common, лишнее отсекает lab2/.dockerignore);
+у веб-интерфейса — lab2/ui (только статика и шаблон nginx).
 Тег — rag/<name>:<IMAGE_TAG> (по умолчанию 1.0.0): тот же в docker-compose.yml Lab2 и в манифестах k8s/.
 Повторная сборка без изменений берёт все слои из кэша; minikube image load копирует образ в узел кластера.
 """
@@ -19,15 +20,16 @@ import time
 from pathlib import Path
 
 LAB2 = Path(__file__).resolve().parents[2] / "lab2"
-DOCKERFILES = {
-    "auth-service": "services/auth-service/Dockerfile",
-    "ingestion-service": "services/ingestion-service/Dockerfile",
-    "inference-service": "services/inference-service/Dockerfile",
-    "indexing-service": "services/indexing-service/Dockerfile",
-    "retrieval-service": "services/retrieval-service/Dockerfile",
-    "chat-service": "services/chat-service/Dockerfile",
-    "analytics-service": "services/analytics-service/Dockerfile",
-    "gateway": "gateway/Dockerfile",
+DOCKERFILES = {  # образ → (Dockerfile, контекст сборки) относительно lab2
+    "auth-service": ("services/auth-service/Dockerfile", "."),
+    "ingestion-service": ("services/ingestion-service/Dockerfile", "."),
+    "inference-service": ("services/inference-service/Dockerfile", "."),
+    "indexing-service": ("services/indexing-service/Dockerfile", "."),
+    "retrieval-service": ("services/retrieval-service/Dockerfile", "."),
+    "chat-service": ("services/chat-service/Dockerfile", "."),
+    "analytics-service": ("services/analytics-service/Dockerfile", "."),
+    "gateway": ("gateway/Dockerfile", "."),
+    "web": ("ui/Dockerfile", "ui"),
 }
 
 
@@ -52,7 +54,8 @@ def main() -> int:
         image = f"rag/{name}:{args.tag}"
         started = time.perf_counter()
         print(f"=== {image}")
-        run("docker", "build", "-f", str(LAB2 / DOCKERFILES[name]), "-t", image, str(LAB2))
+        dockerfile, context = DOCKERFILES[name]
+        run("docker", "build", "-f", str(LAB2 / dockerfile), "-t", image, str(LAB2 / context))
         if not args.no_load:
             run(minikube, "image", "load", image)
         print(f"  готово за {time.perf_counter() - started:.0f} с")

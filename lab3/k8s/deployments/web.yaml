@@ -1,0 +1,42 @@
+# web: веб-интерфейс — nginx отдаёт статику и проксирует /api на Service gateway (один origin, без CORS).
+# Без состояния и очень лёгкий: 2 реплики, обновление без простоя.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: rag
+  labels: {app: web}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: web}
+  strategy:
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      enableServiceLinks: false
+      # nginx-unprivileged: uid/gid 101, порт 8080 — привилегии для порта < 1024 не нужны
+      securityContext: {runAsNonRoot: true, runAsUser: 101, runAsGroup: 101, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: web
+          image: rag/web:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8080}
+          envFrom:
+            - configMapRef: {name: web-config}   # GATEWAY_URL → шаблон nginx (envsubst при старте)
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:       # nginx со статикой: единицы МБ; worker-процессов — по limits.cpu (autotune в образе)
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 200m, memory: 64Mi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}

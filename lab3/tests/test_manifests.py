@@ -26,6 +26,8 @@ PACKAGES = {  # Deployment → (каталог в lab2, Python-пакет с Set
     "analytics-service": ("services/analytics-service", "analytics_service"),
     "gateway": ("gateway", "gateway_service"),
 }
+WEB = "web"  # веб-интерфейс: nginx, не Python — проверяется отдельно (test_web_*)
+PUBLIC = {"gateway", WEB}  # открыты наружу (NodePort)
 EXTERNAL_ENV = {"OMP_NUM_THREADS", "HF_HUB_OFFLINE"}  # читают PyTorch и huggingface_hub, а не Settings
 COMPOSED_ONLY = {"DB_PASSWORD", "RABBITMQ_PASSWORD"}  # только для подстановки $(VAR) в DATABASE_URL / RABBITMQ_URL
 
@@ -68,7 +70,7 @@ def settings_fields(deployment: str) -> set[str]:
 
 def test_all_resources_in_namespace_and_every_service_has_deployment():
     assert {doc["metadata"].get("namespace") for doc in DOCS if doc["kind"] != "Namespace"} == {"rag"}
-    assert set(DEPLOYMENTS) == set(PACKAGES)
+    assert set(DEPLOYMENTS) == set(PACKAGES) | {WEB}
     assert set(STATEFULSETS) == {"postgres", "rabbitmq", "qdrant"}
     assert set(SERVICES) == set(DEPLOYMENTS) | set(STATEFULSETS)
 
@@ -100,7 +102,7 @@ def test_service_selects_pods_and_targets_named_container_port(name):
     assert service["spec"]["selector"].items() <= workload["spec"]["template"]["metadata"]["labels"].items()
     container_ports = {port["name"] for port in container(workload)["ports"]}
     assert {port["targetPort"] for port in service["spec"]["ports"]} <= container_ports
-    expected_type = "NodePort" if name == "gateway" else "ClusterIP"  # наружу — только gateway
+    expected_type = "NodePort" if name in PUBLIC else "ClusterIP"  # наружу — только gateway и веб-интерфейс
     assert service["spec"].get("type", "ClusterIP") == expected_type
     assert (service["spec"].get("clusterIP") == "None") == (name in STATEFULSETS)  # headless для StatefulSet
 
@@ -139,3 +141,29 @@ def test_secrets_are_not_in_configmaps_and_real_secret_is_ignored_by_git():
     for configmap in CONFIGMAPS.values():
         assert not set(configmap["data"]) & SECRET_KEYS, "секретный ключ в ConfigMap"
     assert "k8s/secrets/secret.yaml" in (LAB3 / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+def test_web_deployment_matches_nginx_image_and_proxies_to_gateway():
+    deployment = DEPLOYMENTS[WEB]
+    pod = deployment["spec"]["template"]["spec"]
+    main = container(deployment)
+    assert re.fullmatch(r"rag/web:\d+\.\d+\.\d+", main["image"]) and main["imagePullPolicy"] == "IfNotPresent"
+
+    template = (LAB2 / "ui" / "nginx" / "default.conf.template").read_text(encoding="utf-8")
+    listen = int(re.search(r"listen (\d+);", template).group(1))
+    assert main["ports"] == [{"name": "http", "containerPort": listen}]  # тот порт, что слушает nginx
+    assert "location = /healthz" in template and "${GATEWAY_URL}" in template
+    for probe in ("livenessProbe", "readinessProbe"):
+        assert main[probe]["httpGet"] == {"path": "/healthz", "port": "http"}
+    for bound in ("requests", "limits"):
+        assert set(main["resources"][bound]) == {"cpu", "memory"}
+
+    dockerfile = (LAB2 / "ui" / "Dockerfile").read_text(encoding="utf-8")
+    assert "nginx-unprivileged" in dockerfile  # образ работает от uid 101
+    assert pod["securityContext"]["runAsNonRoot"] and pod["securityContext"]["runAsUser"] == 101
+    assert main["securityContext"]["allowPrivilegeEscalation"] is False and pod["enableServiceLinks"] is False
+
+    [source] = main["envFrom"]
+    gateway_url = CONFIGMAPS[source["configMapRef"]["name"]]["data"]["GATEWAY_URL"]
+    host, port = re.fullmatch(r"http://([\w-]+):(\d+)", gateway_url).groups()
+    assert host == "gateway" and int(port) in {p["port"] for p in SERVICES["gateway"]["spec"]["ports"]}

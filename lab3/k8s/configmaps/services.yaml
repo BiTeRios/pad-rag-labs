@@ -83,3 +83,11 @@ metadata:
 data:
   RATE_LIMIT_PER_MINUTE: "120"  # на пользователя или IP, в каждой реплике gateway
   UPSTREAM_TIMEOUT_S: "60"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-config
+  namespace: rag
+data:
+  GATEWAY_URL: http://gateway:8000   # куда nginx веб-интерфейса проксирует /api (DNS-имя Service)
