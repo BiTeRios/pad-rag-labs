@@ -1,0 +1,19 @@
+# Маршруты gateway: первый совпавший префикс (порядок важен — частные выше общих).
+#   auth: public — токен не нужен (если передан, всё равно проверяется); required — нужен (по умолчанию)
+#   roles — кому разрешено на уровне gateway; сервисы проверяют права ещё раз
+#   rate_limit_per_minute — свой лимит маршрута (по умолчанию — RATE_LIMIT_PER_MINUTE)
+#   timeout_s — ожидание ответа сервиса (по умолчанию — UPSTREAM_TIMEOUT_S)
+# Пути /internal/* сервисов здесь отсутствуют: снаружи они недоступны.
+# Адреса сервисов — переменные окружения <SERVICE>_URL (AUTH_URL, CHAT_URL, …).
+
+routes:
+  - {prefix: /api/auth/register, service: auth, auth: public, rate_limit_per_minute: 10}
+  - {prefix: /api/auth/login, service: auth, auth: public, rate_limit_per_minute: 20}
+  - {prefix: /api/auth, service: auth}
+  - {prefix: /api/ingestion, service: ingestion}
+  - {prefix: /api/indexing, service: indexing}
+  - {prefix: /api/search, service: retrieval}
+  - {prefix: /api/chat/ask, service: chat, timeout_s: 180, rate_limit_per_minute: 10}  # LLM дорогая
+  - {prefix: /api/chat, service: chat}
+  - {prefix: /api/feedback, service: analytics}
+  - {prefix: /api/analytics, service: analytics, roles: [admin]}
