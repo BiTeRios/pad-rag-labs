@@ -195,6 +195,17 @@ services:
       <<: *ready
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
 
+  # Веб-интерфейс: nginx отдаёт статику и проксирует /api на gateway (healthcheck — в образе, /healthz)
+  web:
+    build: {context: ./ui}
+    image: rag/web:${IMAGE_TAG:-1.0.0}  # тот же тег, что в Kubernetes (lab3/k8s)
+    environment:
+      GATEWAY_URL: http://gateway:8000
+    ports: ["8080:8080"]  # http://localhost:8080
+    depends_on:
+      gateway: {condition: service_healthy}
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   rabbitmq-data:
