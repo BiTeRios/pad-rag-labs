@@ -1,0 +1,12 @@
+# auth-service: регистрация, вход, JWT. ClusterIP — доступен только внутри кластера: http://auth-service:8001
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: rag
+  labels: {app: auth-service}
+spec:
+  type: ClusterIP
+  selector: {app: auth-service}
+  ports:
+    - {name: http, port: 8001, targetPort: http}

@@ -1,0 +1,25 @@
+# Общие параметры всех сервисов (подключаются через envFrom).
+# Соседи — по DNS-именам Kubernetes Service, не localhost: http://<service>:<port>.
+# Пароли сюда не попадают: они в Secret rag-secrets, а DATABASE_URL / RABBITMQ_URL собираются в Deployment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-common
+  namespace: rag
+data:
+  LOG_LEVEL: INFO
+
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: rag
+  QDRANT_URL: http://qdrant:6333
+
+  AUTH_URL: http://auth-service:8001
+  INGESTION_URL: http://ingestion-service:8002
+  INFERENCE_URL: http://inference-service:8003
+  INDEXING_URL: http://indexing-service:8004
+  RETRIEVAL_URL: http://retrieval-service:8005
+  CHAT_URL: http://chat-service:8006
+  ANALYTICS_URL: http://analytics-service:8007

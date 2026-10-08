@@ -1,0 +1,63 @@
+# PostgreSQL — один сервер, внутри отдельная БД и пользователь на каждый сервис (auth, ingestion, chat, analytics).
+# StatefulSet, а не Deployment: стабильное имя пода (postgres-0) и свой том, который переживает пересоздание пода.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: rag
+  labels: {app: postgres}
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          ports:
+            - {name: postgres, containerPort: 5432}
+          env:
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - {name: POSTGRES_USER, value: postgres}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: POSTGRES_PASSWORD}}
+            # пароли пользователей сервисов — для init-databases.sh
+            - name: AUTH_DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: AUTH_DB_PASSWORD}}
+            - name: INGESTION_DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: INGESTION_DB_PASSWORD}}
+            - name: CHAT_DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: CHAT_DB_PASSWORD}}
+            - name: ANALYTICS_DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: ANALYTICS_DB_PASSWORD}}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+          readinessProbe:
+            exec: {command: [pg_isready, -U, postgres, -h, 127.0.0.1]}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec: {command: [pg_isready, -U, postgres, -h, 127.0.0.1]}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+      volumes:
+        - name: init
+          configMap: {name: postgres-init, defaultMode: 0755}  # исполняемый: запускается, а не подключается через source
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 1Gi}

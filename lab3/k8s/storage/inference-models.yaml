@@ -1,0 +1,12 @@
+# Кэш весов моделей inference-service (HF_HOME=/models): e5-base ~1.1 ГБ + bge-reranker-v2-m3 ~2.3 ГБ.
+# Скачиваются один раз при первом старте; пересоздание пода и minikube stop/start их не теряют.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inference-models
+  namespace: rag
+  labels: {app: inference-service}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 8Gi}

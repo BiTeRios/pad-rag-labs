@@ -1,0 +1,57 @@
+# auth-service: пользователи, роли, выпуск JWT. Stateless (данные — в своей БД auth), поэтому 2 реплики.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: rag
+  labels: {app: auth-service}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: auth-service}
+  strategy:
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}  # обновление без простоя
+  template:
+    metadata:
+      labels: {app: auth-service}
+    spec:
+      enableServiceLinks: false  # без переменных *_SERVICE_HOST/*_PORT: адреса соседей — из ConfigMap
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: auth-service
+          image: rag/auth-service:1.0.0
+          imagePullPolicy: IfNotPresent  # образ загружен в Minikube (docker/build_images.py), не из registry
+          ports:
+            - {name: http, containerPort: 8001}
+          envFrom:
+            - configMapRef: {name: rag-common}
+            - configMapRef: {name: auth-config}
+          env:
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: AUTH_DB_PASSWORD}}
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: RABBITMQ_PASSWORD}}
+            - name: JWT_SECRET
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: JWT_SECRET}}
+            - name: ADMIN_EMAIL
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: ADMIN_EMAIL}}
+            - name: ADMIN_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: ADMIN_PASSWORD}}
+            # $(VAR) подставляет Kubernetes из переменных выше: хост и порт — ConfigMap, пароль — Secret
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://auth:$(DB_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/auth
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)/
+          livenessProbe:   # процесс жив; не проходит → kubelet перезапускает контейнер
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:  # готов принимать запросы (БД отвечает); не проходит → под убирается из Service
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:       # bcrypt — заметная нагрузка на CPU при входе
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}

@@ -1,0 +1,41 @@
+# Все манифесты одной командой: kubectl apply -k k8s/
+# kustomize (встроен в kubectl) применяет namespace первым и собирает файлы из подкаталогов;
+# у kubectl apply -f k8s/ нет ни рекурсии, ни порядка (namespace может создаться позже ресурсов в нём).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rag
+labels:
+  - pairs: {app.kubernetes.io/part-of: rag}
+
+resources:
+  - namespace.yaml
+  # Secret: k8s/secrets/secret.yaml создаёт scripts/make_secret.py (в git только secret.example.yaml)
+  - secrets/secret.yaml
+  - configmaps/common.yaml
+  - configmaps/services.yaml
+  - configmaps/postgres-init.yaml
+  - storage/inference-models.yaml
+  # Инфраструктура: StatefulSet + headless Service
+  - statefulsets/postgres.yaml
+  - statefulsets/rabbitmq.yaml
+  - statefulsets/qdrant.yaml
+  - services/postgres.yaml
+  - services/rabbitmq.yaml
+  - services/qdrant.yaml
+  # Сервисы приложения: Deployment + Service
+  - deployments/auth-service.yaml
+  - deployments/ingestion-service.yaml
+  - deployments/inference-service.yaml
+  - deployments/indexing-service.yaml
+  - deployments/retrieval-service.yaml
+  - deployments/chat-service.yaml
+  - deployments/analytics-service.yaml
+  - deployments/gateway.yaml
+  - services/auth-service.yaml
+  - services/ingestion-service.yaml
+  - services/inference-service.yaml
+  - services/indexing-service.yaml
+  - services/retrieval-service.yaml
+  - services/chat-service.yaml
+  - services/analytics-service.yaml
+  - services/gateway.yaml

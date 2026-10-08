@@ -1,0 +1,50 @@
+# chat-service: вопрос → retrieval-service → LLM (Ollama на хосте) → ответ с источниками; история в своей БД chat.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-service
+  namespace: rag
+  labels: {app: chat-service}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: chat-service}
+  strategy:
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  template:
+    metadata:
+      labels: {app: chat-service}
+    spec:
+      enableServiceLinks: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: chat-service
+          image: rag/chat-service:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8006}
+          envFrom:
+            - configMapRef: {name: rag-common}
+            - configMapRef: {name: chat-config}
+          env:
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: CHAT_DB_PASSWORD}}
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: RABBITMQ_PASSWORD}}
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://chat:$(DB_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/chat
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)/
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}

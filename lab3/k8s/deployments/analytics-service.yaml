@@ -1,0 +1,49 @@
+# analytics-service: проекция событий (вопросы, отказы, обновления индекса) и оценки ответов; своя БД analytics.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: rag
+  labels: {app: analytics-service}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: analytics-service}
+  strategy:
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  template:
+    metadata:
+      labels: {app: analytics-service}
+    spec:
+      enableServiceLinks: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: analytics-service
+          image: rag/analytics-service:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8007}
+          envFrom:
+            - configMapRef: {name: rag-common}
+          env:
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: ANALYTICS_DB_PASSWORD}}
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: RABBITMQ_PASSWORD}}
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://analytics:$(DB_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/analytics
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)/
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:  # БД и брокер: сервис живёт событиями
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}

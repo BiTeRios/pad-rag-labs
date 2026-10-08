@@ -1,0 +1,53 @@
+# ingestion-service: сбор корпуса из GitHub, своя БД ingestion, событие documents.changed.
+# Одна реплика и Recreate: запуск синхронизации блокируется внутри процесса (одна синхронизация за раз).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-service
+  namespace: rag
+  labels: {app: ingestion-service}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: ingestion-service}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: {app: ingestion-service}
+    spec:
+      enableServiceLinks: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: ingestion-service
+          image: rag/ingestion-service:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8002}
+          envFrom:
+            - configMapRef: {name: rag-common}
+            - configMapRef: {name: ingestion-config}
+          env:
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: INGESTION_DB_PASSWORD}}
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: RABBITMQ_PASSWORD}}
+            - name: GITHUB_TOKEN
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: GITHUB_TOKEN, optional: true}}
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://ingestion:$(DB_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/ingestion
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)/
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:       # корпус ~4.4 МБ текста в памяти при синхронизации
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}

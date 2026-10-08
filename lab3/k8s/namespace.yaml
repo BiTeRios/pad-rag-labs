@@ -1,0 +1,7 @@
+# Все ресурсы RAG-системы — в отдельном namespace: их легко посмотреть (kubectl get all -n rag) и удалить целиком.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rag
+  labels:
+    app.kubernetes.io/part-of: rag

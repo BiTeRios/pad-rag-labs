@@ -1,0 +1,13 @@
+# gateway — единственный сервис, открытый наружу. NodePort 30080 на узле Minikube;
+# с хоста: kubectl port-forward -n rag svc/gateway 8000:8000 или minikube service gateway -n rag --url
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: rag
+  labels: {app: gateway}
+spec:
+  type: NodePort
+  selector: {app: gateway}
+  ports:
+    - {name: http, port: 8000, targetPort: http, nodePort: 30080}

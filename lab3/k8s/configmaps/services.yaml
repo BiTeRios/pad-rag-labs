@@ -1,0 +1,85 @@
+# Параметры отдельных сервисов. Значения выбраны в Lab1 (эксперименты E1–E9); меняются здесь, без пересборки образа:
+#   kubectl apply -k k8s/ && kubectl rollout restart deployment/<service> -n rag
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-config
+  namespace: rag
+data:
+  TOKEN_TTL_MINUTES: "60"
+  PASSWORD_MIN_LENGTH: "8"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingestion-config
+  namespace: rag
+data:
+  GITHUB_REPO: kubernetes/website
+  GITHUB_REF: main
+  DOCS_ROOT: content/en/docs
+  SECTIONS: concepts,tasks,tutorials
+  MAX_WORKERS: "8"
+  FETCH_LIMIT: "0"              # не больше N документов за синхронизацию (быстрая проверка); 0 — все
+  EVENT_BATCH_SIZE: "50"        # documents.changed пачками: сообщение обрабатывается минуты, а не полчаса
+  SYNC_INTERVAL_MINUTES: "0"    # периодическая синхронизация; 0 — только по запросу admin
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inference-config
+  namespace: rag
+data:
+  EMBEDDING_MODEL: intfloat/multilingual-e5-base   # E4
+  RERANKER_ENABLED: "true"                         # E6
+  RERANKER_MODEL: BAAI/bge-reranker-v2-m3
+  DEVICE: cpu                   # в Minikube нет GPU
+  HF_HUB_OFFLINE: "0"           # 1 — не обращаться к Hugging Face, если веса уже в томе
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: indexing-config
+  namespace: rag
+data:
+  CHUNK_STRATEGY: heading       # E1–E3
+  CHUNK_SIZE: "1000"
+  CHUNK_OVERLAP: "0"
+  EMBED_BATCH: "64"
+  INFERENCE_TIMEOUT_S: "180"    # векторизация пачки chunks на CPU
+  RECONCILE_ON_STARTUP: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: retrieval-config
+  namespace: rag
+data:
+  TOP_K: "5"                    # E5
+  CANDIDATES: "20"
+  SCORE_THRESHOLD: "0.78"       # E7
+  RERANKER_ENABLED: "true"      # E6
+  RERANK_MIN_SCORE: "0.1"       # E7
+  INFERENCE_TIMEOUT_S: "60"     # reranker на CPU — секунды; дольше — ответ без reranker (degraded)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chat-config
+  namespace: rag
+data:
+  # LLM — Ollama на хосте (GPU); из подов Minikube хост доступен как host.minikube.internal
+  LLM_BASE_URL: http://host.minikube.internal:11434
+  LLM_MODEL: qwen3:8b           # E8
+  PROMPT_NAME: strict           # E9
+  LLM_TIMEOUT_S: "120"
+  RETRIEVAL_TIMEOUT_S: "90"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  namespace: rag
+data:
+  RATE_LIMIT_PER_MINUTE: "120"  # на пользователя или IP, в каждой реплике gateway
+  UPSTREAM_TIMEOUT_S: "60"

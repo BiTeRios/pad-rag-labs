@@ -1,0 +1,49 @@
+# indexing-service: preprocessing + chunking корпуса, векторы через inference-service, индекс в Qdrant.
+# Одна реплика и Recreate: задача индексации и сверка индекса с корпусом блокируются внутри процесса,
+# а события documents.changed обрабатываются по одному (prefetch=1).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: indexing-service
+  namespace: rag
+  labels: {app: indexing-service}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: indexing-service}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: {app: indexing-service}
+    spec:
+      enableServiceLinks: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: indexing-service
+          image: rag/indexing-service:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8004}
+          envFrom:
+            - configMapRef: {name: rag-common}
+            - configMapRef: {name: indexing-config}
+          env:
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: rag-secrets, key: RABBITMQ_PASSWORD}}
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)/
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          readinessProbe:  # Qdrant, брокер и коллекция (имя зависит от модели inference-service)
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {cpu: "1", memory: 768Mi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}

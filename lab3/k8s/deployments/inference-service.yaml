@@ -1,0 +1,60 @@
+# inference-service: e5 (эмбеддинги) и bge-reranker на CPU — самый тяжёлый сервис.
+# Веса моделей (~3.4 ГБ) скачиваются при первом старте в том inference-models и переживают пересоздание пода.
+# /health отвечает сразу, /ready — когда модели в памяти (первый старт — минуты): до этого трафик не идёт.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-service
+  namespace: rag
+  labels: {app: inference-service}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: inference-service}
+  strategy:
+    type: Recreate  # том ReadWriteOnce и 2+ ГБ памяти на реплику: две копии одновременно не нужны
+  template:
+    metadata:
+      labels: {app: inference-service}
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: inference-service
+          image: rag/inference-service:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8003}
+          envFrom:
+            - configMapRef: {name: rag-common}
+            - configMapRef: {name: inference-config}
+          env:
+            # Потоков PyTorch — столько, сколько ядер в limits (Downward API), иначе потоки по числу ядер узла
+            # упираются в квоту CPU и мешают друг другу
+            - name: OMP_NUM_THREADS
+              valueFrom: {resourceFieldRef: {resource: limits.cpu, divisor: "1"}}
+          volumeMounts:
+            - {name: models, mountPath: /models}  # HF_HOME в образе
+          livenessProbe:   # под нагрузкой (векторизация) ответ может задерживаться — запас по времени
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {cpu: "6", memory: 4Gi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+      volumes:
+        - name: models
+          persistentVolumeClaim: {claimName: inference-models}
