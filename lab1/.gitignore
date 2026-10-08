@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+logs/
+
+# данные воспроизводятся grabber'ом и индексацией
+data/*
+!data/.gitkeep

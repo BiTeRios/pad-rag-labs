@@ -1,0 +1,117 @@
+# Параметры пайплайна Lab1. Пути указываются относительно new/lab1/.
+# Секреты (GITHUB_TOKEN) задаются только в .env.
+
+grabber:
+  repo: kubernetes/website          # GitHub-репозиторий с документацией
+  ref: main                         # ветка, тег или коммит
+  docs_root: content/en/docs        # корень документации внутри репозитория
+  sections: [concepts, tasks, tutorials]
+  extensions: [".md"]
+  site_url: https://kubernetes.io/docs   # из него строятся ссылки на страницы
+  source_name: kubernetes-docs
+  raw_dir: data/raw                 # исходные документы как есть
+  manifest_file: data/manifest.json # metadata и SHA всех документов
+  log_file: logs/grabber.log
+  timeout_s: 30                     # таймаут одного HTTP-запроса
+  max_retries: 3                    # повторы при 429/5xx и сетевых ошибках
+  backoff_s: 1.0                    # экспоненциальная пауза между повторами
+  max_workers: 8                    # параллельные загрузки
+
+preprocessing:
+  documents_file: data/processed/documents.jsonl  # очищенные документы + metadata
+  chunks_file: data/processed/chunks.jsonl
+  log_file: logs/preprocessing.log
+
+chunking:                           # выбрано в E1–E3 (README §10): heading, 1000, без overlap
+  strategy: heading                 # fixed | paragraph | heading
+  chunk_size: 1000                  # максимум символов текста chunk
+  chunk_overlap: 0                  # перекрытие в символах, только для fixed
+  include_heading: true             # добавлять «Title > Section» в начало chunk
+
+embeddings:
+  model: multilingual-e5-base       # ключ из models; выбрана в E4 (bge-m3 +1 вопрос, индексация в 13 раз дольше)
+  device: auto                      # auto | cuda | cpu
+  batch_size: 64
+  log_file: logs/embeddings.log
+  models:
+    multilingual-e5-base:
+      name: intfloat/multilingual-e5-base
+      query_prefix: "query: "       # E5 обучена с префиксами query/passage
+      passage_prefix: "passage: "
+      max_seq_length: 512
+    bge-m3:
+      name: BAAI/bge-m3
+      query_prefix: ""
+      passage_prefix: ""
+      max_seq_length: 1024
+
+vector_store:
+  path: data/qdrant                 # Qdrant в локальном режиме
+  collection_prefix: k8s            # коллекция: <prefix>__<модель>__<strategy>-<size>-<overlap>-<h|nh>
+  upsert_batch: 256
+
+retrieval:
+  top_k: 5                          # сколько chunks получает LLM; выбрано в E5 (Recall выходит на максимум к K=5)
+  candidates: 20                    # top-N из векторного поиска до фильтров и reranker
+  log_file: logs/retrieval.log
+
+filters:                            # пороги выбраны в E7 (README §10)
+  score_threshold: 0.78             # мин. косинусная близость (e5: вне базы ≈ 0.75, релевантное ≈ 0.84+); 0 — выкл
+  dedup_threshold: 0.8              # Jaccard по 3-словным шинглам; 1.0 — только точные дубли; 0 — выкл
+  min_chars: 50                     # мин. длина текста chunk без заголовка; короче — в основном «See X for more»
+  max_per_document: 0               # не больше N chunks с одной страницы; 0 — без лимита
+  metadata: {}                      # точные фильтры Qdrant, например {section: concepts/workloads/pods}
+
+reranker:
+  enabled: true                     # E6: с reranker / без
+  model: BAAI/bge-reranker-v2-m3    # мультиязычный cross-encoder
+  device: auto
+  max_length: 512                   # токенов на пару (вопрос, chunk)
+  batch_size: 32
+  min_score: 0.1                    # порог rerank_score (0..1); E7: вне базы ≤ 0.34, найденное ≥ 0.6, но 0.3+ отнимает контекст у s05; 0 — выкл
+
+llm:
+  base_url: http://localhost:11434  # Ollama
+  model: qwen3-8b                   # ключ из models; E8 сравнивает модели и режимы
+  timeout_s: 180
+  models:
+    qwen3-8b:
+      name: qwen3:8b
+      think: false                  # без режима рассуждений: быстрее
+      temperature: 0.1
+      num_ctx: 8192                 # окно контекста в токенах
+      seed: 42
+    qwen3-8b-think:
+      name: qwen3:8b
+      think: true                   # с рассуждениями перед ответом
+      temperature: 0.1
+      num_ctx: 8192
+      seed: 42
+    gemma3-12b:
+      name: gemma3:12b              # thinking не поддерживает, параметр think не передаётся
+      temperature: 0.1
+      num_ctx: 8192
+      seed: 42
+    gemma3-12b-judge:
+      name: gemma3:12b              # судья для evaluation: другая модель, чем основная, и temperature 0
+      temperature: 0.0
+      num_ctx: 8192
+      seed: 42
+
+generation:
+  prompts_file: configs/prompts.yaml
+  prompt: strict                    # вариант из prompts_file; E9 сравнивает strict и basic
+  no_context_answer: "В документации недостаточно информации для ответа на этот вопрос."
+  refusal_marker: "недостаточно информации"  # по этой фразе ответ считается отказом
+  log_file: logs/generation.log
+
+evaluation:
+  eval_set: experiments/eval_set.yaml
+  experiments_file: configs/experiments.yaml  # сетка экспериментов E1–E9
+  results_dir: experiments/results  # <results_dir>/<имя прогона>/{summary.json, results.jsonl, report.md}
+  k_values: [1, 3, 5, 10, 20]       # метрики retrieval считаются для каждого K (E5)
+  judge_llm: gemma3-12b-judge       # один судья для всех экспериментов, чтобы оценки были сравнимы
+  judge_prompts:                    # два независимых вызова судьи (configs/prompts.yaml)
+    correctness: judge_correctness
+    faithfulness: judge_faithfulness
+  log_file: logs/evaluation.log

@@ -1,0 +1,17 @@
+# PyTorch с CUDA 12.8; без NVIDIA GPU эту строку можно убрать: поставится CPU-сборка
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+# grabber
+requests==2.34.2
+PyYAML==6.0.3
+python-dotenv==1.2.4
+
+# embeddings и vector store
+torch==2.11.0
+sentence-transformers==6.1.0
+transformers==5.19.0            # прямой импорт: отключение прогресс-бара загрузки весов
+qdrant-client==1.19.1
+numpy==2.5.3
+
+# тесты
+pytest==9.1.1
