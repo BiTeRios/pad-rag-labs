@@ -25,6 +25,7 @@
 ```text
  хост (Windows)                      Minikube: узел minikube, namespace rag
  ───────────────                     ────────────────────────────────────────────────────────────────────────────
+ браузер ──:8080──►  Service web (NodePort 30081) ──► Deployment web ×2 (nginx: статика, /api → gateway)
  kubectl port-forward ──:8000──►  Service gateway (NodePort 30080) ──► Deployment gateway ×2
                                          │ http://<service>:<port> (DNS-имена Service, не localhost)
            ┌──────────────┬──────────────┼───────────────┬───────────────┬────────────────┐
@@ -45,6 +46,7 @@
 | Компонент | Объект | Реплик | Service | Порт | Probes: liveness / readiness | requests → limits | Хранилище |
 |-----------|--------|-------:|---------|-----:|------------------------------|-------------------|-----------|
 | gateway | Deployment | 2 | NodePort 30080 | 8000 | `/health` / `/ready` | 50m, 96Mi → 500m, 256Mi | — |
+| web (UI) | Deployment | 2 | NodePort 30081 | 8080 | `/healthz` / `/healthz` | 10m, 16Mi → 200m, 64Mi | — |
 | auth-service | Deployment | 2 | ClusterIP | 8001 | `/health` / `/ready` (БД) | 50m, 96Mi → 500m, 256Mi | БД `auth` |
 | ingestion-service | Deployment, Recreate | 1 | ClusterIP | 8002 | `/health` / `/ready` (БД) | 50m, 128Mi → 1, 512Mi | БД `ingestion` |
 | inference-service | Deployment, Recreate | 1 | ClusterIP | 8003 | `/health` / `/ready` (модели загружены) | 1, 2Gi → 6, 4Gi | PVC `inference-models` |
@@ -102,6 +104,7 @@
 | `rag/auth-service:1.0.0` | 304 MB | bcrypt, PyJWT |
 | `rag/chat-service:1.0.0`, `rag/analytics-service:1.0.0` | 303 MB | — |
 | `rag/gateway:1.0.0`, `rag/retrieval-service:1.0.0` | 285 MB | — |
+| `rag/web:1.0.0` | 23 MB | `nginx-unprivileged` (uid 101) + статика UI, без сборки |
 
 Чем оптимизированы Dockerfile (пример — `../lab2/services/inference-service/Dockerfile`):
 - база `python:3.12-slim`; `PIP_NO_CACHE_DIR`, без компиляторов;
@@ -141,12 +144,13 @@
 ```bash
 cd lab3
 minikube start --driver=docker --cpus=8 --memory=10g
-python docker/build_images.py              # 8 образов: docker build (кэш) + minikube image load
+python docker/build_images.py              # 9 образов: docker build (кэш) + minikube image load
 python scripts/make_secret.py              # k8s/secrets/secret.yaml со случайными паролями (в .gitignore)
 kubectl apply -k k8s/                      # namespace, ConfigMap, Secret, PVC, StatefulSet, Deployment, Service
 kubectl config set-context --current --namespace=rag   # дальше kubectl get pods без -n rag
 kubectl get pods -w                        # все 1/1 Running
 kubectl port-forward svc/gateway 8000:8000 # API и Swagger: http://localhost:8000/docs
+kubectl port-forward svc/web 8080:8080     # веб-интерфейс: http://localhost:8080 (в другом окне)
 ```
 
 Через NodePort без port-forward: `minikube service gateway -n rag --url`. На Windows и macOS с драйвером docker команда держит туннель, пока открыта.
@@ -186,6 +190,7 @@ python docker/build_images.py chat-service && kubectl rollout restart deployment
 | ConfigMap `retrieval-config` | `TOP_K`, `CANDIDATES`, `SCORE_THRESHOLD`, `RERANKER_ENABLED`, `RERANK_MIN_SCORE` | retrieval |
 | ConfigMap `chat-config` | `LLM_BASE_URL`, `LLM_MODEL`, `PROMPT_NAME`, `LLM_TIMEOUT_S` | chat |
 | ConfigMap `gateway-config` | `RATE_LIMIT_PER_MINUTE`, `UPSTREAM_TIMEOUT_S` | gateway |
+| ConfigMap `web-config` | `GATEWAY_URL` (`http://gateway:8000`) — куда nginx проксирует `/api` | web |
 | ConfigMap `postgres-init` | скрипт `init-databases.sh`: БД и пользователь на сервис | postgres (один раз) |
 | Secret `rag-secrets` | `POSTGRES_PASSWORD`, `<AUTH/INGESTION/CHAT/ANALYTICS>_DB_PASSWORD`, `RABBITMQ_PASSWORD`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `GITHUB_TOKEN` | каждый — только свои ключи |
 
@@ -240,11 +245,12 @@ kubectl get pods -l app=auth-service   # вместо удалённого уж�
 ## 9. Тестирование
 
 ```bash
-../lab2/.venv/Scripts/python -m pytest tests        # 30 тестов манифестов, ≈1 с, без кластера
+../lab2/.venv/Scripts/python -m pytest tests        # 32 теста манифестов, ≈1 с, без кластера
 kubectl apply -k k8s/ --dry-run=server              # проверка схемы API-сервером
 ```
 
 `tests/test_manifests.py` проверяет то, что `kubectl apply` пропустит молча.
+- Веб-интерфейс: порт совпадает с `listen` в шаблоне nginx, probes `/healthz`, uid 101 как в образе, `GATEWAY_URL` указывает на Service gateway.
 - Каждый ключ ConfigMap и каждая переменная в `env` совпадает с полем `Settings` сервиса: тест импортирует код из Lab2. Опечатка вроде `RERANK_ENABLED` не прошла бы, а сервис молча взял бы значение по умолчанию.
 - `containerPort` совпадает с портом uvicorn из `CMD` в Dockerfile.
 - Service выбирает поды своего Deployment и ссылается на именованный порт контейнера.
@@ -269,6 +275,7 @@ python scripts/demo.py              # сценарий защиты (разде�
 |-----|-----------|
 | сборка и загрузка образов | `python docker/build_images.py`: 8 образов за 84 с (сборка из кэша, `minikube image load`; inference 2 ГБ — 32 с) |
 | `kubectl apply -k k8s/` | 34 объекта; **все 15 подов Running и READY за ≈60 с, 0 перезапусков** |
+| веб-интерфейс (добавлен позже) | `kubectl apply -k k8s/` → 2 пода `web` Ready за 6 с, остальные поды не перезапускались; через `port-forward svc/web`: вход, вопрос → ответ со ссылками (14.5 с), история диалогов, оценки, панель admin (синхронизация из UI: 452 без изменений за 1 с) |
 | inference, первый старт | модели скачаны в PVC (3.2 ГБ) и загружены за 97 с; до этого под NotReady, трафик на него не шёл |
 | синхронизация корпуса | 452 документа из GitHub за 18 с → 10 событий `documents.changed` по 50 документов |
 | индексация **по событиям** | 424 документа, **6497 chunks (как в Lab1 и Compose)** за 18.2 мин на CPU; пачка — ≈2 мин; очередь обработана по одному сообщению (prefetch=1) |

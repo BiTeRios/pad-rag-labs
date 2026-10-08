@@ -5,17 +5,17 @@
 | Лабораторная | Что сделано | README |
 |--------------|-------------|--------|
 | **Lab1. RAG-система** | grabber документации из GitHub (инкрементально, без дублей), очистка и chunking, эмбеддинги `multilingual-e5-base`, Qdrant, reranker `bge-reranker-v2-m3`, фильтры, генерация через Ollama (`qwen3:8b`), evaluation на 40 вопросах с LLM-судьёй, исследования E1–E9 | [lab1/README.md](lab1/README.md) |
-| **Lab2. Микросервисы** | 7 бизнес-сервисов (auth, ingestion, inference, indexing, retrieval, chat, analytics) + API Gateway; REST и события RabbitMQ; БД на сервис в PostgreSQL; JWT; JSON-логи со сквозным request_id; Docker Compose | [lab2/README.md](lab2/README.md) |
+| **Lab2. Микросервисы** | 7 бизнес-сервисов (auth, ingestion, inference, indexing, retrieval, chat, analytics) + API Gateway; REST и события RabbitMQ; БД на сервис в PostgreSQL; JWT; JSON-логи со сквозным request_id; веб-интерфейс (чат с источниками, история, оценки, панель admin); Docker Compose | [lab2/README.md](lab2/README.md) |
 | **Lab3. Docker и Kubernetes** | оптимизированные образы, манифесты Kubernetes (Deployment, StatefulSet, Service, ConfigMap, Secret, PVC, probes, resources), запуск в Minikube, масштабирование и восстановление подов | [lab3/README.md](lab3/README.md) |
 
 ## Архитектура
 
 ```text
-клиент ──► API Gateway ──► auth · ingestion · indexing · retrieval · chat · analytics
-                                   │           │          │          │
-                         GitHub ◄──┘    Qdrant ◄┘   inference ◄┘     └──► Ollama (LLM)
-                                    (e5 + reranker)
-           PostgreSQL (БД на сервис) · RabbitMQ (documents.changed, index.updated, question.answered)
+браузер (UI) ──► API Gateway ──► auth · ingestion · indexing · retrieval · chat · analytics
+                                         │           │          │          │
+                               GitHub ◄──┘    Qdrant ◄┘   inference ◄┘     └──► Ollama (LLM)
+                                          (e5 + reranker)
+                 PostgreSQL (БД на сервис) · RabbitMQ (documents.changed, index.updated, question.answered)
 ```
 
 Конвейер ответа:
@@ -51,12 +51,12 @@ python -m src.ingest
 python -m src.generation "Как ограничить потребление памяти контейнером?"
 
 # Lab2: вся система одной командой (пароли — в .env)
-cd lab2 && cp .env.example .env && docker compose up --build
+cd lab2 && cp .env.example .env && docker compose up --build   # UI: http://localhost:8080
 
 # Lab3: Kubernetes
 cd lab3 && minikube start --cpus=8 --memory=10g
 python docker/build_images.py && python scripts/make_secret.py
-kubectl apply -k k8s/ && kubectl port-forward -n rag svc/gateway 8000:8000
+kubectl apply -k k8s/ && kubectl port-forward -n rag svc/web 8080:8080   # UI: http://localhost:8080
 ```
 
 Подробные шаги, конфигурация, API и примеры — в README лабораторных (разделы 4–8).
@@ -67,7 +67,7 @@ kubectl apply -k k8s/ && kubectl port-forward -n rag svc/gateway 8000:8000
 |-----|---------|-------:|
 | lab1 | `pytest` | 109 |
 | lab2 | `pytest` (+ `tests/e2e` против запущенной системы) | 97 + 6 e2e |
-| lab3 | `python -m pytest tests` (проверка манифестов) | 30 |
+| lab3 | `python -m pytest tests` (проверка манифестов) | 32 |
 
 ## Результаты
 
