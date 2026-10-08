@@ -55,16 +55,18 @@ def format_context(chunks: list[dict]) -> str:
 def cited_sources(text: str, chunks: list[dict]) -> list[dict]:
     """Фрагменты, на которые сослалась модель ([n] или [n, m]); без ссылок — весь контекст.
 
-    Несколько chunks одной страницы дают один источник.
+    Несколько chunks одной страницы дают один источник; refs — все номера [n] этой страницы, чтобы клиент мог
+    связать с источником любую ссылку ответа, а не только первую.
     """
     cited = sorted({
         int(number) for group in _CITATION.findall(text) for number in group.split(",") if 1 <= int(number) <= len(chunks)
     })
-    sources, seen_urls = [], set()
+    by_url: dict[str, dict] = {}
     for n in cited or range(1, len(chunks) + 1):
         chunk = chunks[n - 1]
-        if chunk["url"] not in seen_urls:
-            seen_urls.add(chunk["url"])
-            sources.append({"n": n, "document_id": chunk["document_id"], "title": chunk["title"],
-                            "heading": chunk["heading"], "url": chunk["url"]})
-    return sources
+        if chunk["url"] in by_url:
+            by_url[chunk["url"]]["refs"].append(n)
+        else:
+            by_url[chunk["url"]] = {"n": n, "refs": [n], "document_id": chunk["document_id"], "title": chunk["title"],
+                                    "heading": chunk["heading"], "url": chunk["url"]}
+    return list(by_url.values())

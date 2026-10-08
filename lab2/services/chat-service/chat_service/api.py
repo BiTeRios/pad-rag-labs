@@ -16,6 +16,8 @@ class AskRequest(BaseModel):
 
 class Source(BaseModel):
     n: int = Field(description="номер фрагмента в ответе: [n]")
+    refs: list[int] = Field(default_factory=list,
+                            description="все номера [n] этой страницы в ответе (несколько фрагментов — один источник)")
     document_id: str
     title: str
     heading: str

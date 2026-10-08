@@ -144,5 +144,6 @@ def test_validation_and_auth(client):
 
 def test_cited_sources_from_lab1():
     chunks = [chunk(0, "a"), chunk(1, "b"), chunk(2, "a")]
-    assert [s["n"] for s in cited_sources("x [3] y [2, 1] z [9]", chunks)] == [1, 2]  # одна страница — один источник
+    sources = cited_sources("x [3] y [2, 1] z [9]", chunks)
+    assert [(s["n"], s["refs"]) for s in sources] == [(1, [1, 3]), (2, [2])]  # одна страница — один источник
     assert len(cited_sources("без ссылок", chunks)) == 2
