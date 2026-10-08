@@ -1,0 +1,6 @@
+# Скрипты и Dockerfile выполняются в Linux-контейнерах: только LF
+* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yaml text eol=lf
+*.py text eol=lf

@@ -1,0 +1,12 @@
+# Окружение и кэши
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.idea/
+.vscode/
+
+# Секреты: в git только шаблоны (.env.example, secret.example.yaml)
+.env
