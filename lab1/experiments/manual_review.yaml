@@ -1,0 +1,38 @@
+# Экспертная (ручная) оценка ответов прогона baseline: qwen3:8b, промпт strict, heading-1000, reranker, top-5.
+# Шкала та же, что у LLM-судьи: 0 / 1 / 2. Отказы (вопросы no_answer) не размечаются — их оценивает правило.
+# Разметка выполнена по эталону (correctness) и контексту, переданному LLM (faithfulness). Размечал ассистент;
+# перед защитой стоит выборочно перепроверить.
+# Используется для проверки согласия LLM-судьи с экспертом: python -m src.evaluation.agreement --name <прогон>.
+
+f01: {correctness: 2, faithfulness: 2, note: "«логический хост», совместное размещение — прямо из контекста [5]"}
+f02: {correctness: 2, faithfulness: 2, note: "«все данные кластера» ≈ «all API server data» — пересказ, не выдумка"}
+f03: {correctness: 2, faithfulness: 2}
+f04: {correctness: 2, faithfulness: 2}
+f05: {correctness: 2, faithfulness: 2}
+f06: {correctness: 2, faithfulness: 2}
+f07: {correctness: 2, faithfulness: 2}
+f08: {correctness: 2, faithfulness: 2, note: "уникальность имён передана как «одинаковые имена в разных namespace»"}
+f09: {correctness: 1, faithfulness: 2, note: "нет загрузки образов; причины из debug-pods подтверждены контекстом [3]"}
+f10: {correctness: 2, faithfulness: 2}
+s01: {correctness: 2, faithfulness: 2}
+s02: {correctness: 2, faithfulness: 2, note: "kubectl scale + kubectl patch, обе команды из контекста"}
+s03: {correctness: 2, faithfulness: 2, note: "--to-revision=2 есть в deployment.md"}
+s04: {correctness: 2, faithfulness: 2, note: "вопрос только про лимит; requests в эталоне — дополнительная деталь"}
+s05: {correctness: 2, faithfulness: 1, note: "assign-pod-node.md не попал в top-5: «самый простой рекомендуемый» взято из вопроса"}
+s06: {correctness: 2, faithfulness: 2}
+s07: {correctness: 2, faithfulness: 2}
+s08: {correctness: 1, faithfulness: 2, note: "нет «число или процент» и значения по умолчанию 25%"}
+m01: {correctness: 1, faithfulness: 1, note: "нет декларативных обновлений Deployment; «каждый Pod связан с хранилищем» — обобщение"}
+m02: {correctness: 2, faithfulness: 1, note: "последняя фраза про Secret и файлы искажена"}
+m03: {correctness: 2, faithfulness: 2, note: "все связи переданы: управляет ReplicaSet, новый ReplicaSet при обновлении, рекомендация"}
+m04: {correctness: 1, faithfulness: 0, note: "ОШИБКА: «Deployment подходит для состоятельных приложений»"}
+m05: {correctness: 1, faithfulness: 1, note: "«Job не повторяется» — неточно: Job повторяет Pod'ы до успеха"}
+m06: {correctness: 2, faithfulness: 2, note: "автоматическое создание PV прямо описано в dynamic-provisioning"}
+m07: {correctness: 1, faithfulness: 1, note: "нет Ingress-контроллера; последняя фраза спорная"}
+c01: {correctness: 1, faithfulness: 1, note: "оговорка «Deployment — для состоятельных» вместо «без состояния»"}
+c02: {correctness: 2, faithfulness: 2, note: "«как и при любой другой ошибке» = «as with any other type of runtime failure»"}
+c03: {correctness: 1, faithfulness: 2, note: "нет последовательного выполнения init-контейнеров"}
+c04: {correctness: 2, faithfulness: 2, note: "эфемерность, workload resources, восстановление и масштабирование — есть"}
+c05: {correctness: 2, faithfulness: 2, note: "EndpointSlices — актуальное название endpoints, не ошибка"}
+c06: {correctness: 2, faithfulness: 1, note: "ОШИБКА: «предотвращает непредвиденные сбои» — PDB только для добровольных нарушений"}
+c07: {correctness: 1, faithfulness: 1, note: "нет рекомендации (шифрование at rest, RBAC); последняя фраза искажена"}

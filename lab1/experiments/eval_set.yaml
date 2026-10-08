@@ -1,0 +1,301 @@
+# Набор вопросов для оценки RAG: 40 вопросов, 5 типов.
+#
+# Поля:
+#   relevant_docs — документы, где есть ответ (document_id = путь внутри content/en/docs);
+#   match         — any: достаточно любого документа; all: нужны все (вопросы по нескольким документам);
+#   evidence      — фразы из релевантных документов, подтверждающие эталон (проверяет tests/test_eval_set.py);
+#   absent        — для no_answer: фразы, которых в корпусе быть не должно.
+# Метки на уровне документов, а не chunks: они не зависят от стратегии chunking (эксперименты E1–E3).
+
+- id: f01
+  type: factual
+  question: Что такое Pod?
+  expected_answer: Pod — наименьшая развёртываемая единица вычислений в Kubernetes, группа из одного или нескольких контейнеров с общими хранилищем и сетевыми ресурсами и спецификацией их запуска.
+  relevant_docs: [concepts/workloads/pods/_index.md]
+  evidence: ["smallest deployable units"]
+
+- id: f02
+  type: factual
+  question: Какой компонент control plane хранит все данные кластера?
+  expected_answer: etcd — согласованное высокодоступное хранилище «ключ-значение» для всех данных API-сервера.
+  relevant_docs: [concepts/overview/components.md]
+  evidence: ["consistent and highly-available key value store"]
+
+- id: f03
+  type: factual
+  question: Какой порт обычно использует HTTP API kubelet на рабочих узлах?
+  expected_answer: TCP-порт 10250.
+  relevant_docs: [concepts/security/api-server-bypass-risks.md]
+  evidence: ["port 10250"]
+
+- id: f04
+  type: factual
+  question: Из какого диапазона по умолчанию выделяются порты для Service типа NodePort?
+  expected_answer: Из диапазона 30000–32767.
+  relevant_docs: [concepts/services-networking/service.md]
+  evidence: ["30000-32767"]
+
+- id: f05
+  type: factual
+  question: Что делает kube-scheduler?
+  expected_answer: Отслеживает Pod'ы, ещё не назначенные на узел, и выбирает для каждого из них подходящий узел.
+  relevant_docs: [concepts/overview/components.md, concepts/scheduling-eviction/kube-scheduler.md]
+  evidence: ["looks for pods not yet bound to a node"]
+
+- id: f06
+  type: factual
+  question: Какое значение restartPolicy у Pod используется по умолчанию?
+  expected_answer: Always.
+  relevant_docs: [concepts/workloads/pods/pod-lifecycle.md]
+  evidence: ["the default value is always"]
+
+- id: f07
+  type: factual
+  question: Какой максимальный объём данных можно хранить в одном ConfigMap?
+  expected_answer: Не более 1 MiB.
+  relevant_docs: [concepts/configuration/configmap.md]
+  evidence: ["cannot exceed 1 mib"]
+
+- id: f08
+  type: factual
+  question: Для чего в Kubernetes нужны Namespace?
+  expected_answer: Namespace — механизм изоляции групп ресурсов внутри одного кластера; имена ресурсов должны быть уникальны в пределах namespace, но не между namespace.
+  relevant_docs: [concepts/overview/working-with-objects/namespaces.md]
+  evidence: ["mechanism for isolating groups of resources"]
+
+- id: f09
+  type: factual
+  question: Что означает фаза Pending у Pod?
+  expected_answer: Pod принят кластером, но один или несколько контейнеров ещё не готовы к запуску — в том числе Pod ждёт планирования на узел или загрузки образов.
+  relevant_docs: [concepts/workloads/pods/pod-lifecycle.md]
+  evidence: ["the pod has been accepted by the kubernetes cluster"]
+
+- id: f10
+  type: factual
+  question: Какой тип Service создаётся, если тип не указан явно?
+  expected_answer: ClusterIP.
+  relevant_docs: [concepts/services-networking/service.md]
+  evidence: ["default clusterip"]
+
+- id: s01
+  type: specific
+  question: Какое поле манифеста Deployment задаёт желаемое число реплик?
+  expected_answer: Поле `.spec.replicas`.
+  relevant_docs: [concepts/workloads/controllers/deployment.md]
+  evidence: [".spec.replicas"]
+
+- id: s02
+  type: specific
+  question: Какой командой kubectl изменить число реплик Deployment?
+  expected_answer: "`kubectl scale deployment/<имя> --replicas=<N>`, например `kubectl scale deployment/nginx-deployment --replicas=10`."
+  relevant_docs: [concepts/workloads/controllers/deployment.md, tutorials/kubernetes-basics/scale/scale-intro.md]
+  evidence: ["kubectl scale deployment/nginx-deployment --replicas=10"]
+
+- id: s03
+  type: specific
+  question: Какой командой откатить Deployment на предыдущую ревизию?
+  expected_answer: "`kubectl rollout undo deployment/<имя>`; с `--to-revision=<N>` — на конкретную ревизию."
+  relevant_docs:
+    - concepts/workloads/controllers/deployment.md
+    - tasks/run-application/update-deployment-rolling.md
+    - tutorials/kubernetes-basics/update/update-intro.md
+  evidence: ["kubectl rollout undo"]
+
+- id: s04
+  type: specific
+  question: Какое поле в манифесте контейнера задаёт лимит памяти?
+  expected_answer: "`resources.limits.memory` (минимальный запрос памяти — `resources.requests.memory`)."
+  relevant_docs:
+    - tasks/configure-pod-container/assign-memory-resource.md
+    - concepts/configuration/manage-resources-containers.md
+  evidence: ["resources.limits.memory"]
+
+- id: s05
+  type: specific
+  question: Какое поле Pod — самый простой рекомендуемый способ ограничить узлы, на которых он может запускаться, по меткам узлов?
+  expected_answer: Поле `nodeSelector`.
+  relevant_docs: [concepts/scheduling-eviction/assign-pod-node.md]
+  evidence: ["nodeselector is the simplest recommended form"]
+
+- id: s06
+  type: specific
+  question: Какие три вида проб (probes) можно настроить для контейнера?
+  expected_answer: Liveness probe, readiness probe и startup probe.
+  relevant_docs:
+    - concepts/workloads/pods/probes.md
+    - tasks/configure-pod-container/configure-liveness-readiness-startup-probes.md
+  evidence: ["liveness probes determine when to restart a container"]
+
+- id: s07
+  type: specific
+  question: Какой командой посмотреть логи предыдущего (упавшего) экземпляра контейнера?
+  expected_answer: "`kubectl logs <pod> -c <контейнер> --previous`."
+  relevant_docs:
+    - tasks/debug/debug-application/debug-running-pod.md
+    - concepts/cluster-administration/logging.md
+  evidence: ["--previous"]
+
+- id: s08
+  type: specific
+  question: Какой параметр rolling update задаёт, сколько Pod'ов может быть недоступно во время обновления Deployment?
+  expected_answer: "`maxUnavailable` (`.spec.strategy.rollingUpdate.maxUnavailable`): число или процент Pod'ов; по умолчанию 25%."
+  relevant_docs: [concepts/workloads/controllers/deployment.md, tasks/run-application/update-deployment-rolling.md]
+  evidence: ["max unavailable", "25%"]
+
+- id: m01
+  type: multi_doc
+  question: Чем Deployment отличается от StatefulSet?
+  expected_answer: Deployment управляет взаимозаменяемыми (stateless) Pod'ами и обеспечивает декларативные обновления. StatefulSet даёт каждому Pod стабильный уникальный сетевой идентификатор, стабильное постоянное хранилище и упорядоченные развёртывание, масштабирование и обновления — для stateful-приложений.
+  relevant_docs: [concepts/workloads/controllers/deployment.md, concepts/workloads/controllers/statefulset.md]
+  match: all
+  evidence: ["provides declarative updates for pods and replicasets", "stable, unique network identifiers"]
+
+- id: m02
+  type: multi_doc
+  question: Чем ConfigMap отличается от Secret?
+  expected_answer: ConfigMap хранит несекретную конфигурацию в виде пар «ключ-значение» и не обеспечивает секретности или шифрования. Secret предназначен для небольших объёмов чувствительных данных — паролей, токенов, ключей.
+  relevant_docs: [concepts/configuration/configmap.md, concepts/configuration/secret.md]
+  match: all
+  evidence: ["does not provide secrecy or encryption", "small amount of sensitive data"]
+
+- id: m03
+  type: multi_doc
+  question: Как связаны Deployment и ReplicaSet?
+  expected_answer: ReplicaSet поддерживает заданное число одинаковых Pod'ов. Deployment — объект более высокого уровня, который управляет ReplicaSet'ами и даёт декларативные обновления (rolling update, откат), поэтому вместо прямого использования ReplicaSet рекомендуется Deployment.
+  relevant_docs: [concepts/workloads/controllers/deployment.md, concepts/workloads/controllers/replicaset.md]
+  match: all
+  evidence: ["provides declarative updates for pods and replicasets", "stable set of replica pods"]
+
+- id: m04
+  type: multi_doc
+  question: Чем DaemonSet отличается от Deployment?
+  expected_answer: DaemonSet запускает копию Pod на всех (или выбранных) узлах и автоматически добавляет её на новые узлы. Deployment поддерживает заданное число реплик независимо от числа узлов.
+  relevant_docs: [concepts/workloads/controllers/daemonset.md, concepts/workloads/controllers/deployment.md]
+  match: all
+  evidence: ["daemonset ensures that all (or some) nodes run a copy of a pod", "provides declarative updates for pods and replicasets"]
+
+- id: m05
+  type: multi_doc
+  question: Чем Job отличается от CronJob?
+  expected_answer: Job создаёт Pod'ы и повторяет их выполнение, пока заданное число Pod'ов не завершится успешно. CronJob создаёт Job'ы по расписанию в формате cron.
+  relevant_docs: [concepts/workloads/controllers/job.md, concepts/workloads/controllers/cron-jobs.md]
+  match: all
+  evidence: ["will continue to retry execution of the pods", "cronjob creates jobs on a repeating schedule"]
+
+- id: m06
+  type: multi_doc
+  question: Как StorageClass и PersistentVolumeClaim обеспечивают динамическое выделение томов?
+  expected_answer: PersistentVolumeClaim — запрос пользователя на хранилище. Если в PVC указан StorageClass, его provisioner автоматически создаёт PersistentVolume по запросу (dynamic provisioning), и администратору не нужно создавать тома заранее.
+  relevant_docs: [concepts/storage/persistent-volumes.md, concepts/storage/dynamic-provisioning.md]
+  match: all
+  evidence: ["a persistentvolumeclaim (pvc) is a request for storage by a user", "allows storage volumes to be created on-demand"]
+
+- id: m07
+  type: multi_doc
+  question: Чем Ingress отличается от Service типа LoadBalancer?
+  expected_answer: Service типа LoadBalancer публикует один Service наружу через внешний балансировщик нагрузки облака. Ingress маршрутизирует HTTP/HTTPS-трафик извне к разным Service по правилам (хосты, пути) и требует Ingress-контроллер.
+  relevant_docs: [concepts/services-networking/ingress.md, concepts/services-networking/service.md]
+  match: all
+  evidence: ["ingress exposes http and https routes", "exposes the service externally using an external load balancer"]
+
+- id: c01
+  type: context
+  question: Когда стоит использовать StatefulSet, а не Deployment?
+  expected_answer: Когда приложению нужны стабильные уникальные сетевые идентификаторы, стабильное постоянное хранилище и упорядоченные развёртывание, масштабирование и rolling update. Если этого не требуется, лучше подходит Deployment.
+  relevant_docs: [concepts/workloads/controllers/statefulset.md]
+  evidence: ["stable, unique network identifiers", "stable, persistent storage"]
+
+- id: c02
+  type: context
+  question: Что произойдёт с контейнером, если он попытается использовать больше памяти, чем его лимит?
+  expected_answer: Контейнер становится кандидатом на завершение (OOM kill). Если он продолжает превышать лимит, его завершают, а при подходящей политике перезапуска kubelet перезапускает его.
+  relevant_docs:
+    - tasks/configure-pod-container/assign-memory-resource.md
+    - concepts/configuration/manage-resources-containers.md
+  evidence: ["becomes a candidate for termination"]
+
+- id: c03
+  type: context
+  question: Зачем нужны init-контейнеры?
+  expected_answer: Это специальные контейнеры, которые выполняются до запуска основных контейнеров Pod — по очереди, каждый должен успешно завершиться. В них можно держать утилиты и скрипты подготовки, которых нет в образе приложения.
+  relevant_docs: [concepts/workloads/pods/init-containers.md]
+  evidence: ["specialized containers that run before app containers"]
+
+- id: c04
+  type: context
+  question: Почему обычно не создают отдельные Pod'ы напрямую?
+  expected_answer: Pod'ы эфемерны и одноразовые. Их лучше создавать через ресурсы рабочих нагрузок (Deployment, StatefulSet, Job), контроллеры которых пересоздают Pod'ы при сбоях, масштабируют их и выполняют обновления.
+  relevant_docs: [concepts/workloads/pods/_index.md]
+  evidence: ["rarely create individual pods directly"]
+
+- id: c05
+  type: context
+  question: Что происходит, если readiness probe контейнера не проходит?
+  expected_answer: Контейнер не перезапускается. IP-адрес Pod'а убирается из endpoints всех подходящих Service, и трафик на Pod не направляется, пока проба снова не начнёт проходить.
+  relevant_docs: [concepts/workloads/pods/probes.md, concepts/workloads/pods/pod-lifecycle.md]
+  evidence: ["removes the pod's ip address from the endpoints"]
+
+- id: c06
+  type: context
+  question: Для чего нужен PodDisruptionBudget?
+  expected_answer: Он ограничивает число Pod'ов реплицированного приложения, которые могут быть одновременно недоступны из-за добровольных нарушений (например, drain узла при обслуживании), чтобы приложение оставалось доступным.
+  relevant_docs: [concepts/workloads/pods/disruptions.md, tasks/run-application/configure-pdb.md]
+  evidence: ["limits the number of pods of a replicated application that are down simultaneously"]
+
+- id: c07
+  type: context
+  question: Почему Secret в Kubernetes по умолчанию нельзя считать надёжно защищённым?
+  expected_answer: По умолчанию Secret хранится в etcd в незашифрованном виде, и любой, у кого есть доступ к API или etcd, может его прочитать. Нужно включить шифрование at rest и ограничить доступ через RBAC.
+  relevant_docs: [concepts/configuration/secret.md, concepts/security/secrets-good-practices.md]
+  evidence: ["stored unencrypted"]
+
+- id: n01
+  type: no_answer
+  question: Как приготовить борщ?
+  expected_answer: Ответа нет в документации — система должна отказаться.
+  relevant_docs: []
+
+- id: n02
+  type: no_answer
+  question: Кто выиграл чемпионат мира по футболу в 2018 году?
+  expected_answer: Ответа нет в документации — система должна отказаться.
+  relevant_docs: []
+
+- id: n03
+  type: no_answer
+  question: Сколько стоит управляемый кластер Kubernetes в Google Cloud в месяц?
+  expected_answer: Ответа нет в документации — система должна отказаться.
+  relevant_docs: []
+
+- id: n04
+  type: no_answer
+  question: В каком году Kubernetes передали в CNCF и кто был первым председателем технического комитета?
+  expected_answer: Ответа нет в документации — система должна отказаться.
+  relevant_docs: []
+
+- id: n05
+  type: no_answer
+  question: Как развернуть стек в Docker Swarm командой docker stack deploy?
+  expected_answer: Ответа нет в документации — система должна отказаться.
+  relevant_docs: []
+  absent: ["docker swarm", "docker stack"]
+
+- id: n06
+  type: no_answer
+  question: Какая средняя зарплата DevOps-инженера в Москве?
+  expected_answer: Ответа нет в документации — система должна отказаться.
+  relevant_docs: []
+
+- id: n07
+  type: no_answer
+  question: Как собрать кластер Kubernetes на Raspberry Pi?
+  expected_answer: Ответа нет в документации — система должна отказаться.
+  relevant_docs: []
+  absent: ["raspberry"]
+
+- id: n08
+  type: no_answer
+  question: Какое максимальное число узлов поддерживает один кластер Kubernetes?
+  expected_answer: Ответа нет в корпусе (он есть только в разделе setup, не вошедшем в корпус) — система должна отказаться.
+  relevant_docs: []
+  absent: ["5,000 nodes", "5000 nodes"]
