@@ -1,0 +1,39 @@
+{
+  "id": "E5",
+  "title": "Top-K",
+  "question": "сколько chunks передавать LLM; метрики для K = 1, 3, 5, 10, 20 считаются по одному прогону",
+  "generate": false,
+  "per_k": true,
+  "rows": [
+    {
+      "variant": "K=1",
+      "hit": 0.8438,
+      "recall": 0.75,
+      "precision": 0.8438
+    },
+    {
+      "variant": "K=3",
+      "hit": 0.9688,
+      "recall": 0.9219,
+      "precision": 0.6146
+    },
+    {
+      "variant": "K=5",
+      "hit": 0.9688,
+      "recall": 0.9688,
+      "precision": 0.5802
+    },
+    {
+      "variant": "K=10",
+      "hit": 0.9688,
+      "recall": 0.9688,
+      "precision": 0.5521
+    },
+    {
+      "variant": "K=20",
+      "hit": 0.9688,
+      "recall": 0.9688,
+      "precision": 0.5509
+    }
+  ]
+}

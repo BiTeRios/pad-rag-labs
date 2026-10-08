@@ -1,0 +1,39 @@
+{
+  "correctness": {
+    "n": 32,
+    "exact": 0.75,
+    "within_1": 1.0,
+    "judge_mean": 0.766,
+    "expert_mean": 0.859,
+    "judge_stricter": 7,
+    "judge_lenient": 1,
+    "disagreements": [
+      "f08",
+      "s02",
+      "s04",
+      "s08",
+      "m03",
+      "c02",
+      "c04",
+      "c05"
+    ]
+  },
+  "faithfulness": {
+    "n": 32,
+    "exact": 0.781,
+    "within_1": 0.969,
+    "judge_mean": 0.969,
+    "expert_mean": 0.844,
+    "judge_stricter": 0,
+    "judge_lenient": 7,
+    "disagreements": [
+      "s05",
+      "m01",
+      "m04",
+      "m05",
+      "c01",
+      "c06",
+      "c07"
+    ]
+  }
+}

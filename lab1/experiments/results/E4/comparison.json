@@ -1,0 +1,60 @@
+{
+  "id": "E4",
+  "title": "Embedding-модель",
+  "question": "какая модель лучше находит английские документы по русским вопросам",
+  "generate": false,
+  "rows": [
+    {
+      "variant": "e5-base",
+      "hit@1": 0.8125,
+      "hit@k": 0.9688,
+      "recall@k": 0.9375,
+      "precision@k": 0.625,
+      "mrr": 0.8776,
+      "recall_multi_doc": 0.8571,
+      "no_answer_empty": 0.0,
+      "answerable_empty": 0.0,
+      "latency_ms": 46,
+      "chunks": 6497
+    },
+    {
+      "variant": "bge-m3",
+      "hit@1": 0.75,
+      "hit@k": 1.0,
+      "recall@k": 0.9375,
+      "precision@k": 0.6312,
+      "mrr": 0.8594,
+      "recall_multi_doc": 0.7143,
+      "no_answer_empty": 0.0,
+      "answerable_empty": 0.0,
+      "latency_ms": 50,
+      "chunks": 6497
+    },
+    {
+      "variant": "e5-base+reranker",
+      "hit@1": 0.8438,
+      "hit@k": 0.9688,
+      "recall@k": 0.9688,
+      "precision@k": 0.5802,
+      "mrr": 0.901,
+      "recall_multi_doc": 1.0,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 291,
+      "chunks": 6497
+    },
+    {
+      "variant": "bge-m3+reranker",
+      "hit@1": 0.875,
+      "hit@k": 1.0,
+      "recall@k": 0.9844,
+      "precision@k": 0.5771,
+      "mrr": 0.9323,
+      "recall_multi_doc": 0.9286,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 301,
+      "chunks": 6497
+    }
+  ]
+}

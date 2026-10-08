@@ -1,0 +1,34 @@
+{
+  "id": "E6",
+  "title": "Reranker",
+  "question": "что даёт cross-encoder после векторного поиска",
+  "generate": false,
+  "rows": [
+    {
+      "variant": "без reranker",
+      "hit@1": 0.8125,
+      "hit@k": 0.9688,
+      "recall@k": 0.9375,
+      "precision@k": 0.625,
+      "mrr": 0.8776,
+      "recall_multi_doc": 0.8571,
+      "no_answer_empty": 0.5,
+      "answerable_empty": 0.0,
+      "latency_ms": 34,
+      "chunks": 6497
+    },
+    {
+      "variant": "с reranker",
+      "hit@1": 0.8438,
+      "hit@k": 0.9688,
+      "recall@k": 0.9688,
+      "precision@k": 0.5802,
+      "mrr": 0.901,
+      "recall_multi_doc": 1.0,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 262,
+      "chunks": 6497
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "E9",
+  "title": "System prompt",
+  "question": "насколько правила промпта (только контекст, ссылки, явный отказ) влияют на ответы",
+  "generate": true,
+  "rows": [
+    {
+      "variant": "strict",
+      "hit@1": 0.8438,
+      "hit@k": 0.9688,
+      "recall@k": 0.9688,
+      "precision@k": 0.5802,
+      "mrr": 0.901,
+      "recall_multi_doc": 1.0,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 247,
+      "chunks": 6497,
+      "correct_refusal": 1.0,
+      "false_refusal": 0.0,
+      "citation_hit": 0.9375,
+      "generation_s": 1.5875,
+      "correctness": 0.7656,
+      "faithfulness": 0.9688,
+      "claim_support": 0.9883
+    },
+    {
+      "variant": "basic",
+      "hit@1": 0.8438,
+      "hit@k": 0.9688,
+      "recall@k": 0.9688,
+      "precision@k": 0.5802,
+      "mrr": 0.901,
+      "recall_multi_doc": 1.0,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 245,
+      "chunks": 6497,
+      "correct_refusal": 0.75,
+      "false_refusal": 0.0,
+      "citation_hit": 0.9688,
+      "generation_s": 3.9761,
+      "correctness": 0.7656,
+      "faithfulness": 0.9375,
+      "claim_support": 0.9781
+    }
+  ]
+}

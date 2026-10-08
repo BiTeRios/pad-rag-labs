@@ -1,0 +1,112 @@
+{
+  "id": "E2",
+  "title": "Размер chunk",
+  "question": "как размер chunk влияет на точность поиска (две лучшие стратегии из E1)",
+  "generate": false,
+  "rows": [
+    {
+      "variant": "heading 500",
+      "hit@1": 0.6875,
+      "hit@k": 0.9688,
+      "recall@k": 0.9375,
+      "precision@k": 0.5844,
+      "mrr": 0.8229,
+      "recall_multi_doc": 0.8571,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 183,
+      "chunks": 10851
+    },
+    {
+      "variant": "heading 1000",
+      "hit@1": 0.8438,
+      "hit@k": 0.9688,
+      "recall@k": 0.9688,
+      "precision@k": 0.5802,
+      "mrr": 0.901,
+      "recall_multi_doc": 1.0,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 260,
+      "chunks": 6497
+    },
+    {
+      "variant": "heading 1500",
+      "hit@1": 0.75,
+      "hit@k": 1.0,
+      "recall@k": 1.0,
+      "precision@k": 0.5917,
+      "mrr": 0.8698,
+      "recall_multi_doc": 1.0,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 338,
+      "chunks": 5299
+    },
+    {
+      "variant": "heading 2000",
+      "hit@1": 0.8125,
+      "hit@k": 1.0,
+      "recall@k": 1.0,
+      "precision@k": 0.6188,
+      "mrr": 0.901,
+      "recall_multi_doc": 1.0,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 370,
+      "chunks": 4813
+    },
+    {
+      "variant": "paragraph 500",
+      "hit@1": 0.75,
+      "hit@k": 0.9688,
+      "recall@k": 0.9219,
+      "precision@k": 0.5875,
+      "mrr": 0.8542,
+      "recall_multi_doc": 0.7857,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 188,
+      "chunks": 9819
+    },
+    {
+      "variant": "paragraph 1000",
+      "hit@1": 0.875,
+      "hit@k": 1.0,
+      "recall@k": 0.9844,
+      "precision@k": 0.6172,
+      "mrr": 0.9375,
+      "recall_multi_doc": 0.9286,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 258,
+      "chunks": 4679
+    },
+    {
+      "variant": "paragraph 1500",
+      "hit@1": 0.7812,
+      "hit@k": 1.0,
+      "recall@k": 0.9531,
+      "precision@k": 0.5724,
+      "mrr": 0.8828,
+      "recall_multi_doc": 0.7857,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 343,
+      "chunks": 3069
+    },
+    {
+      "variant": "paragraph 2000",
+      "hit@1": 0.7812,
+      "hit@k": 0.9375,
+      "recall@k": 0.9062,
+      "precision@k": 0.55,
+      "mrr": 0.849,
+      "recall_multi_doc": 0.8571,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 366,
+      "chunks": 2293
+    }
+  ]
+}

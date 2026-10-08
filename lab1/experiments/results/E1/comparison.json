@@ -1,0 +1,60 @@
+{
+  "id": "E1",
+  "title": "Стратегия chunking",
+  "question": "какая стратегия разбиения даёт лучший поиск при одинаковом размере chunk",
+  "generate": false,
+  "rows": [
+    {
+      "variant": "fixed",
+      "hit@1": 0.8125,
+      "hit@k": 0.9688,
+      "recall@k": 0.9688,
+      "precision@k": 0.6193,
+      "mrr": 0.8802,
+      "recall_multi_doc": 1.0,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 289,
+      "chunks": 4056
+    },
+    {
+      "variant": "fixed+overlap",
+      "hit@1": 0.7812,
+      "hit@k": 1.0,
+      "recall@k": 0.9531,
+      "precision@k": 0.599,
+      "mrr": 0.8802,
+      "recall_multi_doc": 0.7857,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 274,
+      "chunks": 4884
+    },
+    {
+      "variant": "paragraph",
+      "hit@1": 0.875,
+      "hit@k": 1.0,
+      "recall@k": 0.9844,
+      "precision@k": 0.6172,
+      "mrr": 0.9375,
+      "recall_multi_doc": 0.9286,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 265,
+      "chunks": 4679
+    },
+    {
+      "variant": "heading",
+      "hit@1": 0.8438,
+      "hit@k": 0.9688,
+      "recall@k": 0.9688,
+      "precision@k": 0.5802,
+      "mrr": 0.901,
+      "recall_multi_doc": 1.0,
+      "no_answer_empty": 0.75,
+      "answerable_empty": 0.0,
+      "latency_ms": 256,
+      "chunks": 6497
+    }
+  ]
+}

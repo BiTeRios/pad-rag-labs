@@ -1,0 +1,104 @@
+# Эксперименты L1-E1…E9. Каждый вариант меняет параметры относительно configs/config.yaml (baseline).
+# Запуск: python -m src.evaluation.experiments --only E1,E2   (без --only — все retrieval-эксперименты)
+# Результаты: experiments/results/<id>/comparison.md и папка на каждый вариант.
+#
+# Ключи варианта:
+#   chunking: {strategy, chunk_size, chunk_overlap, include_heading} — недостающий индекс строится автоматически
+#   model: ключ embedding-модели; reranker: true/false; pipeline: пороги RetrievalPipeline
+#   llm, prompt, top_k — для экспериментов с генерацией (generate: true)
+
+E1:
+  title: Стратегия chunking
+  question: какая стратегия разбиения даёт лучший поиск при одинаковом размере chunk
+  generate: false
+  variants:
+    fixed: {chunking: {strategy: fixed, chunk_size: 1000, chunk_overlap: 0}}
+    fixed+overlap: {chunking: {strategy: fixed, chunk_size: 1000, chunk_overlap: 200}}
+    paragraph: {chunking: {strategy: paragraph, chunk_size: 1000}}
+    heading: {chunking: {strategy: heading, chunk_size: 1000}}
+
+E2:
+  title: Размер chunk
+  question: как размер chunk влияет на точность поиска (две лучшие стратегии из E1)
+  generate: false
+  variants:
+    heading 500: {chunking: {strategy: heading, chunk_size: 500}}
+    heading 1000: {chunking: {strategy: heading, chunk_size: 1000}}
+    heading 1500: {chunking: {strategy: heading, chunk_size: 1500}}
+    heading 2000: {chunking: {strategy: heading, chunk_size: 2000}}
+    paragraph 500: {chunking: {strategy: paragraph, chunk_size: 500}}
+    paragraph 1000: {chunking: {strategy: paragraph, chunk_size: 1000}}
+    paragraph 1500: {chunking: {strategy: paragraph, chunk_size: 1500}}
+    paragraph 2000: {chunking: {strategy: paragraph, chunk_size: 2000}}
+
+E3:
+  title: Overlap
+  question: помогает ли перекрытие соседних chunks (стратегия fixed, 1000 символов)
+  generate: false
+  variants:
+    "0": {chunking: {strategy: fixed, chunk_size: 1000, chunk_overlap: 0}}
+    "100": {chunking: {strategy: fixed, chunk_size: 1000, chunk_overlap: 100}}
+    "200": {chunking: {strategy: fixed, chunk_size: 1000, chunk_overlap: 200}}
+    "300": {chunking: {strategy: fixed, chunk_size: 1000, chunk_overlap: 300}}
+
+E4:
+  title: Embedding-модель
+  question: какая модель лучше находит английские документы по русским вопросам
+  generate: false
+  # порог косинуса подобран под e5 (у bge-m3 другой диапазон близости), поэтому здесь он выключен у всех
+  variants:
+    e5-base: {model: multilingual-e5-base, reranker: false, pipeline: {score_threshold: 0}}
+    bge-m3: {model: bge-m3, reranker: false, pipeline: {score_threshold: 0}}
+    e5-base+reranker: {model: multilingual-e5-base, reranker: true, pipeline: {score_threshold: 0}}
+    bge-m3+reranker: {model: bge-m3, reranker: true, pipeline: {score_threshold: 0}}
+
+E5:
+  title: Top-K
+  question: сколько chunks передавать LLM; метрики для K = 1, 3, 5, 10, 20 считаются по одному прогону
+  generate: false
+  per_k: true
+  variants:
+    baseline: {}
+
+E6:
+  title: Reranker
+  question: что даёт cross-encoder после векторного поиска
+  generate: false
+  variants:
+    без reranker: {reranker: false}
+    с reranker: {reranker: true}
+
+E7:
+  title: Пороги
+  question: как пороги отсечения влияют на recall и на долю отказов
+  generate: false
+  variants:
+    без порогов: {pipeline: {score_threshold: 0, rerank_min_score: 0}}
+    cos 0.75: {pipeline: {score_threshold: 0.75, rerank_min_score: 0}}
+    cos 0.78: {pipeline: {score_threshold: 0.78, rerank_min_score: 0}}
+    cos 0.80: {pipeline: {score_threshold: 0.80, rerank_min_score: 0}}
+    cos 0.82: {pipeline: {score_threshold: 0.82, rerank_min_score: 0}}
+    rerank 0.01: {pipeline: {score_threshold: 0, rerank_min_score: 0.01}}
+    rerank 0.1: {pipeline: {score_threshold: 0, rerank_min_score: 0.1}}
+    rerank 0.3: {pipeline: {score_threshold: 0, rerank_min_score: 0.3}}
+    rerank 0.5: {pipeline: {score_threshold: 0, rerank_min_score: 0.5}}
+    cos 0.78 + rerank 0.1: {pipeline: {score_threshold: 0.78, rerank_min_score: 0.1}}
+
+# --- С генерацией: LLM + судья, несколько минут на вариант. Запуск только явно: --only E8 ---
+
+E8:
+  title: LLM и режим
+  question: какая локальная модель и режим дают лучшие ответы на одном и том же контексте
+  generate: true
+  variants:
+    qwen3:8b: {llm: qwen3-8b}
+    qwen3:8b + thinking: {llm: qwen3-8b-think}
+    gemma3:12b: {llm: gemma3-12b}
+
+E9:
+  title: System prompt
+  question: насколько правила промпта (только контекст, ссылки, явный отказ) влияют на ответы
+  generate: true
+  variants:
+    strict: {prompt: strict}
+    basic: {prompt: basic}
