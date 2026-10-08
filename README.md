@@ -75,8 +75,8 @@ kubectl apply -k k8s/ && kubectl port-forward -n rag svc/web 8080:8080   # UI: h
 |-----|-----------|
 | Retrieval (Lab1, 40 вопросов) | Hit@5 0.969, MRR 0.901; reranker поднял Recall@5 на multi-doc вопросах с 0.86 до 1.0 |
 | Ответы (Lab1, LLM-судья) | вопросы вне базы — 100% отказов, ложных отказов 0%; correctness 0.78, faithfulness 0.98; citation hit 0.94 |
-| Lab2, Docker Compose | 11 контейнеров healthy; индексация 6497 chunks по событию RabbitMQ; e2e 6/6 |
-| Lab3, Minikube | 15 подов READY за ≈60 с; e2e 6/6; scale до 3 реплик и пересоздание удалённого пода за ≈6 с; данные PostgreSQL и Qdrant переживают пересоздание подов |
+| Lab2, Docker Compose | 12 контейнеров healthy (8 сервисов, UI, PostgreSQL, RabbitMQ, Qdrant); индексация 6497 chunks по событию RabbitMQ; e2e 6/6 |
+| Lab3, Minikube | 17 подов READY (15 подов backend — за ≈60 с, 2 пода UI — за 6 с); e2e 6/6; scale до 3 реплик и пересоздание удалённого пода за ≈6 с; данные PostgreSQL и Qdrant переживают пересоздание подов |
 
 Подробно, вместе с выводами по каждому эксперименту, — в разделах 10–11 README лабораторных.
 

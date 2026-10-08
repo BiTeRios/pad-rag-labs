@@ -366,12 +366,12 @@ E2E_BASE_URL=http://localhost:8000 E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_P
 Качество ответов исследовано в Lab1: конвейер и параметры здесь те же, результаты — `../lab1/README.md`, разделы 10–11.
 
 ### Docker Compose (2026-10-08)
-`docker compose up --build`: 8 образов сервисов плюс PostgreSQL 17, RabbitMQ 4.3 и Qdrant 1.19. Inference работает на CPU (PyTorch CPU в образе), Ollama — на хосте (GPU), модели взяты из кэша Lab1 (`HF_CACHE`).
+`docker compose up --build`: 8 образов сервисов и образ веб-интерфейса `web` плюс PostgreSQL 17, RabbitMQ 4.3 и Qdrant 1.19. Inference работает на CPU (PyTorch CPU в образе), Ollama — на хосте (GPU), модели взяты из кэша Lab1 (`HF_CACHE`).
 
 | Что | Результат |
 |-----|-----------|
 | образы | inference 2.0 ГБ (PyTorch + модели — в томе), остальные 285–417 МБ |
-| старт | все 11 контейнеров healthy, `/api/status = ok` через ≈25 с после `up` (inference грузит модели ≈20 с) |
+| старт | все 11 контейнеров backend healthy (вместе с `web` — 12), `/api/status = ok` через ≈25 с после `up` (inference грузит модели ≈20 с) |
 | синхронизация с GitHub | 452 документа за 16 с → `documents.changed` в RabbitMQ |
 | индексация **по событию** | indexing получил событие, 424 документа, **6497 chunks (как в Lab1)** за 18.6 мин на CPU → `index.updated` |
 | пачки событий | 45 изменённых документов при `EVENT_BATCH_SIZE=20` → 3 сообщения, обработаны по одному за 24–52 с |
