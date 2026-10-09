@@ -1,5 +1,5 @@
 # Параметры пайплайна Lab1. Пути указываются относительно new/lab1/.
-# Секреты (GITHUB_TOKEN) задаются только в .env.
+# Секреты (GITHUB_TOKEN, ключи Langfuse) задаются только в .env.
 
 grabber:
   repo: kubernetes/website          # GitHub-репозиторий с документацией
@@ -114,4 +114,13 @@ evaluation:
   judge_prompts:                    # два независимых вызова судьи (configs/prompts.yaml)
     correctness: judge_correctness
     faithfulness: judge_faithfulness
+  langfuse_dataset: k8s-docs-eval   # набор вопросов в Langfuse; прогон = dataset run (сравнение в UI)
   log_file: logs/evaluation.log
+
+langfuse:                           # трассировка и оценки в Langfuse (README §2, §5); сервер — langfuse/docker-compose.yml
+  enabled: true                     # нужны LANGFUSE_PUBLIC_KEY и LANGFUSE_SECRET_KEY в .env; без них — выключено
+  base_url: http://localhost:3000   # self-hosted Langfuse
+  environment: lab1                 # окружение в Langfuse: фильтр в UI
+  sample_rate: 1.0                  # доля трассируемых запросов
+  timeout_s: 5                      # таймаут запросов к Langfuse
+  preview_chars: 300                # сколько символов chunk показывать в trace (полный контекст — в промпте LLM)

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 import requests
 
+from src.tracing import Tracer
+
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
@@ -33,6 +35,7 @@ class OllamaClient:
         seed: int | None = 42,  # фиксированный seed: воспроизводимость экспериментов
         timeout_s: float = 180,
         session: requests.Session | None = None,
+        tracer: Tracer | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -42,6 +45,7 @@ class OllamaClient:
         self.think = think
         self.timeout_s = timeout_s
         self.session = session or requests.Session()
+        self.tracer = tracer or Tracer()
 
     def chat(self, system: str, user: str, schema: dict | None = None) -> LLMResponse:
         """schema — JSON Schema ответа (structured output Ollama), например для LLM-судьи."""
@@ -55,6 +59,20 @@ class OllamaClient:
             payload["think"] = self.think
         if schema is not None:
             payload["format"] = schema
+        parameters = {**self.options, **({"think": self.think} if self.think is not None else {})}
+        with self.tracer.observe(
+            "ollama-chat", "generation", model=self.model, model_parameters=parameters, input=payload["messages"]
+        ) as generation:
+            result = self._post(payload)
+            generation.update(
+                output=result.text,
+                usage_details={"input": result.prompt_tokens, "output": result.completion_tokens},
+                metadata={"thinking": result.thinking, "ollama_seconds": round(result.seconds, 3),
+                          "structured_output": schema is not None},
+            )
+        return result
+
+    def _post(self, payload: dict) -> LLMResponse:
         try:
             response = self.session.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout_s)
         except requests.Timeout as error:

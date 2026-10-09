@@ -9,6 +9,7 @@ import time
 
 from src.evaluation.dataset import TYPES, EvalQuestion
 from src.evaluation.judge import LLMJudge
+from src.evaluation.langfuse_run import RunTracing
 from src.evaluation.metrics import average, retrieval_metrics
 from src.generation.generator import AnswerGenerator, format_context
 from src.retrieval.pipeline import RetrievalPipeline
@@ -16,13 +17,16 @@ from src.retrieval.pipeline import RetrievalPipeline
 log = logging.getLogger(__name__)
 
 
-def run_retrieval(pipeline: RetrievalPipeline, questions: list[EvalQuestion], k_values: list[int]) -> list[dict]:
+def run_retrieval(pipeline: RetrievalPipeline, questions: list[EvalQuestion], k_values: list[int],
+                  tracing: RunTracing | None = None) -> list[dict]:
     """Поиск с top_k = max(K): метрики для меньших K считаются по префиксу того же списка."""
+    tracing = tracing or RunTracing()
     max_k = max(k_values)
     records = []
     for question in questions:
         started = time.perf_counter()
-        result = pipeline.run(question.question, top_k=max_k)
+        with tracing.question(question.id, "eval-retrieval", input={"question": question.question}):
+            result = pipeline.run(question.question, top_k=max_k)
         record = {
             "id": question.id,
             "type": question.type,
@@ -54,12 +58,18 @@ def run_retrieval(pipeline: RetrievalPipeline, questions: list[EvalQuestion], k_
     return records
 
 
-def run_generation(generator: AnswerGenerator, records: list[dict], top_k: int) -> None:
+def run_generation(generator: AnswerGenerator, records: list[dict], top_k: int,
+                   tracing: RunTracing | None = None) -> None:
     """Ответ по первым top_k chunks — ровно тот контекст, который получила бы LLM в RAG."""
+    tracing = tracing or RunTracing()
     for record in records:
         context = record["_chunks"][:top_k]
         started = time.perf_counter()
-        answer = generator.generate(record["question"], context)
+        with tracing.question(record["id"], "eval-generation", input={"question": record["question"]}) as span:
+            answer = generator.generate(record["question"], context)
+            span.update(output={"answer": answer.text, "refused": answer.refused})
+            span.set_trace_io(input={"question": record["question"], "expected": record["expected_answer"]},
+                              output={"answer": answer.text, "sources": [s["url"] for s in answer.sources]})
         record.update(
             answer=answer.text,
             refused=answer.refused,
@@ -75,17 +85,21 @@ def run_generation(generator: AnswerGenerator, records: list[dict], top_k: int) 
         log.info("generation %s: refused=%s", record["id"], answer.refused)
 
 
-def run_judge(judge: LLMJudge, records: list[dict]) -> None:
+def run_judge(judge: LLMJudge, records: list[dict], tracing: RunTracing | None = None) -> None:
     """correctness и faithfulness в шкале 0..2.
 
     - Отказ на вопрос без ответа — верно (2), на вопрос с ответом — неверно (0); судья не нужен.
     - Ответ на вопрос без ответа — неверно (0); судья оценивает только faithfulness.
     """
+    tracing = tracing or RunTracing()
     for record in records:
         if record["refused"]:
             record.update(correctness=2 if not record["answerable"] else 0, faithfulness=None, judge_comment="отказ")
             continue
-        verdict = judge.judge(record["question"], record["expected_answer"], record["context_text"], record["answer"])
+        with tracing.question(record["id"], "eval-judge") as span:
+            verdict = judge.judge(record["question"], record["expected_answer"], record["context_text"], record["answer"])
+            span.update(output={"correctness": verdict.correctness, "faithfulness": verdict.faithfulness,
+                                "comment": verdict.comment})
         record.update(
             correctness=verdict.correctness if record["answerable"] else 0,
             faithfulness=verdict.faithfulness,

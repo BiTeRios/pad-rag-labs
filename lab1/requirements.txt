@@ -13,5 +13,8 @@ transformers==5.19.0            # прямой импорт: отключени�
 qdrant-client==1.19.1
 numpy==2.5.3
 
+# трассировка (Langfuse)
+langfuse==4.17.0
+
 # тесты
 pytest==9.1.1

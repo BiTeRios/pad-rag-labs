@@ -14,6 +14,8 @@ import json
 import logging
 from dataclasses import dataclass, field
 
+from src.tracing import Tracer
+
 log = logging.getLogger(__name__)
 
 STATUSES = ("есть", "частично", "нет", "противоречит")
@@ -89,10 +91,11 @@ def correctness_from_facts(facts: list[dict], fallback: int) -> int:
 
 
 class LLMJudge:
-    def __init__(self, llm, prompts: dict[str, dict]):
+    def __init__(self, llm, prompts: dict[str, dict], tracer: Tracer | None = None):
         """prompts: {"correctness": {"system", "user"}, "faithfulness": {"system", "user"}}."""
         self.llm = llm
         self.prompts = prompts
+        self.tracer = tracer or Tracer()
 
     def judge(self, question: str, expected: str, context: str, answer: str) -> Verdict:
         correctness = self.correctness(question, expected, answer)
@@ -127,15 +130,18 @@ class LLMJudge:
 
     def _ask(self, kind: str, schema: dict, **values) -> dict | None:
         prompt = self.prompts[kind]
-        response = self.llm.chat(prompt["system"], prompt["user"].format(**values), schema=schema)
-        try:
-            data = json.loads(response.text)
-            score_key = kind
-            data[score_key] = _score(data[score_key])
-            return data
-        except (ValueError, KeyError, TypeError) as error:
-            log.warning("Судья %s вернул некорректный JSON (%s): %r", kind, error, response.text[:200])
-            return None
+        with self.tracer.observe(f"judge-{kind}", "evaluator") as span:
+            response = self.llm.chat(prompt["system"], prompt["user"].format(**values), schema=schema)
+            try:
+                data = json.loads(response.text)
+                score_key = kind
+                data[score_key] = _score(data[score_key])
+                span.update(output=data)
+                return data
+            except (ValueError, KeyError, TypeError) as error:
+                log.warning("Судья %s вернул некорректный JSON (%s): %r", kind, error, response.text[:200])
+                span.update(level="WARNING", status_message=f"некорректный JSON: {error}")
+                return None
 
 
 def _score(value) -> int:

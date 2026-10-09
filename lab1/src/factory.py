@@ -68,7 +68,7 @@ def build_reranker(cfg: dict):
     )
 
 
-def build_pipeline(cfg: dict, retriever, reranker=None, **overrides):
+def build_pipeline(cfg: dict, retriever, reranker=None, tracer=None, **overrides):
     """RetrievalPipeline с порогами из config; overrides — для CLI и экспериментов."""
     from src.retrieval.pipeline import RetrievalPipeline
 
@@ -84,7 +84,7 @@ def build_pipeline(cfg: dict, retriever, reranker=None, **overrides):
         "rerank_min_score": cfg["reranker"]["min_score"],
         **overrides,
     }
-    return RetrievalPipeline(retriever, reranker, **params)
+    return RetrievalPipeline(retriever, reranker, tracer=tracer, **params)
 
 
 def llm_key(cfg: dict, override: str | None = None) -> str:
@@ -94,7 +94,7 @@ def llm_key(cfg: dict, override: str | None = None) -> str:
     return key
 
 
-def build_llm(cfg: dict, key: str):
+def build_llm(cfg: dict, key: str, tracer=None):
     from src.generation.llm import OllamaClient
 
     spec = cfg["llm"]["models"][key]
@@ -106,6 +106,7 @@ def build_llm(cfg: dict, key: str):
         think=spec.get("think"),
         seed=spec.get("seed"),
         timeout_s=cfg["llm"]["timeout_s"],
+        tracer=tracer,
     )
 
 
@@ -143,16 +144,17 @@ def build_rag(
     llm: str | None = None,
     prompt: str | None = None,
     use_reranker: bool | None = None,
+    tracer=None,
     **pipeline_overrides,
 ):
     """RAG из config с переопределениями. Возвращает (rag, qdrant_client): клиент нужно закрыть."""
     from src.rag import RAG
 
     retrieval, client = build_retrieval(
-        cfg, model=model, chunking=chunking, use_reranker=use_reranker, **pipeline_overrides
+        cfg, model=model, chunking=chunking, use_reranker=use_reranker, tracer=tracer, **pipeline_overrides
     )
-    generator = build_generator(cfg, build_llm(cfg, llm_key(cfg, llm)), prompt)
-    return RAG(retrieval, generator), client
+    generator = build_generator(cfg, build_llm(cfg, llm_key(cfg, llm), tracer), prompt)
+    return RAG(retrieval, generator, tracer), client
 
 
 def build_retrieval(
@@ -161,6 +163,7 @@ def build_retrieval(
     model: str | None = None,
     chunking: dict | None = None,
     use_reranker: bool | None = None,
+    tracer=None,
     **pipeline_overrides,
 ):
     """RetrievalPipeline для коллекции модели и параметров chunking. Возвращает (pipeline, qdrant_client)."""
@@ -181,17 +184,18 @@ def build_retrieval(
         cfg,
         Retriever(build_embedder(cfg, model), store),
         build_reranker(cfg) if use_reranker else None,
+        tracer,
         **pipeline_overrides,
     )
     return pipeline, client
 
 
-def build_judge(cfg: dict):
+def build_judge(cfg: dict, tracer=None):
     from src.evaluation.judge import LLMJudge
 
     settings = cfg["evaluation"]
     prompts = {kind: load_prompt(cfg, name) for kind, name in settings["judge_prompts"].items()}
-    return LLMJudge(build_llm(cfg, llm_key(cfg, settings["judge_llm"])), prompts)
+    return LLMJudge(build_llm(cfg, llm_key(cfg, settings["judge_llm"]), tracer), prompts, tracer)
 
 
 def open_qdrant(cfg: dict):

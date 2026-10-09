@@ -12,6 +12,7 @@ from src.factory import add_chunking_args, build_rag, chunking_params
 from src.generation.llm import LLMError
 from src.logging_setup import setup_logging
 from src.retrieval.filters import body_text
+from src.tracing import build_tracer
 
 log = logging.getLogger("generation")
 
@@ -34,9 +35,11 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(args.config)
     setup_logging(resolve_path(cfg["generation"]["log_file"]), args.log_level)
 
+    tracer = build_tracer(cfg)
     try:
         rag, client = build_rag(
             cfg,
+            tracer=tracer,
             model=args.model,
             chunking=chunking_params(cfg, args),
             llm=args.llm,
@@ -54,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     finally:
         client.close()
+        tracer.flush()
 
     answer = result.answer
     print(f"Вопрос: {answer.question}\n\nОтвет:\n{answer.text}\n")
@@ -74,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
             f"{answer.llm.prompt_tokens} + {answer.llm.completion_tokens} токенов"
         )
     print(f"[поиск {result.retrieval_s:.2f} с: {stages}; {llm_info}; отказ: {'да' if answer.refused else 'нет'}]")
+    if url := tracer.trace_url(result.trace_id):
+        print(f"[Langfuse: {url}]")
     log.info("question=%r refused=%s sources=%s stages=%s", answer.question, answer.refused,
              [s["url"] for s in answer.sources], result.stages)
     return 0

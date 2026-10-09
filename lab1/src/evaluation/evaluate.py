@@ -6,6 +6,7 @@ import time
 from src.config import resolve_path
 from src.embeddings.embedder import release_gpu_memory
 from src.evaluation.dataset import load_eval_set
+from src.evaluation.langfuse_run import RunTracing
 from src.evaluation.report import load_run, save_run
 from src.evaluation.runner import run_generation, run_judge, run_retrieval, summarize
 from src.factory import (
@@ -18,6 +19,7 @@ from src.factory import (
     llm_key,
     model_key,
 )
+from src.tracing import build_tracer
 
 log = logging.getLogger(__name__)
 
@@ -51,11 +53,15 @@ def evaluate(
         questions = [question for question in questions if question.id in question_ids]
 
     started = time.perf_counter()
+    tracer = build_tracer(cfg)
     pipeline, client = build_retrieval(
-        cfg, model=model, chunking=chunking, use_reranker=use_reranker, **pipeline_overrides
+        cfg, model=model, chunking=chunking, use_reranker=use_reranker, tracer=tracer, **pipeline_overrides
     )
+    tracing = RunTracing(tracer, name, settings["langfuse_dataset"],
+                         tags=["evaluation", model, "rerank" if pipeline.reranker else "no-rerank"])
+    tracing.sync_dataset(questions)
     try:
-        records = run_retrieval(pipeline, questions, k_values)
+        records = run_retrieval(pipeline, questions, k_values, tracing)
     finally:
         client.close()
 
@@ -80,14 +86,16 @@ def evaluate(
         llm = llm_key(cfg, llm)
         prompt = prompt or cfg["generation"]["prompt"]
         params.update(llm=llm, prompt=prompt)
-        run_generation(build_generator(cfg, build_llm(cfg, llm), prompt), records, top_k)
+        tracing.tags += [llm, f"prompt-{prompt}"]
+        run_generation(build_generator(cfg, build_llm(cfg, llm, tracer), prompt), records, top_k, tracing)
         if judge:
             params["judge"] = settings["judge_llm"]
-            run_judge(build_judge(cfg), records)
+            run_judge(build_judge(cfg, tracer), records, tracing)
 
     summary = summarize(records, k_values, top_k)
     summary["elapsed_s"] = round(time.perf_counter() - started, 1)
     save_run(resolve_path(settings["results_dir"]) / name, name, params, summary, records, k_values)
+    tracing.report(records, summary, top_k)
     log.info("Прогон %s: %d вопросов за %.0f с", name, len(records), summary["elapsed_s"])
     return {"params": params, "summary": summary, "records": records}
 
@@ -107,10 +115,13 @@ def rejudge(cfg: dict, source: str, name: str | None = None) -> dict:
 
     started = time.perf_counter()
     params["judge"] = settings["judge_llm"]
-    run_judge(build_judge(cfg), records)
+    name = name or source
+    tracer = build_tracer(cfg)
+    tracing = RunTracing(tracer, name, tags=["evaluation", "rejudge"])  # без dataset run: вопросы не перезапускались
+    run_judge(build_judge(cfg, tracer), records, tracing)
     summary = summarize(records, settings["k_values"], params["top_k"])
     summary["elapsed_s"] = round(time.perf_counter() - started, 1)
-    name = name or source
     save_run(results_dir / name, name, params, summary, records, settings["k_values"])
+    tracing.report(records, summary, params["top_k"])
     log.info("Судья перезапущен на %s: %d вопросов за %.0f с", source, len(records), summary["elapsed_s"])
     return {"params": params, "summary": summary, "records": records}
