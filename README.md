@@ -4,7 +4,7 @@
 
 | Лабораторная | Что сделано | README |
 |--------------|-------------|--------|
-| **Lab1. RAG-система** | grabber документации из GitHub (инкрементально, без дублей), очистка и chunking, эмбеддинги `multilingual-e5-base`, Qdrant, reranker `bge-reranker-v2-m3`, фильтры, генерация через Ollama (`qwen3:8b`), evaluation на 40 вопросах с LLM-судьёй, исследования E1–E9 | [lab1/README.md](lab1/README.md) |
+| **Lab1. RAG-система** | grabber документации из GitHub (инкрементально, без дублей), очистка и chunking, эмбеддинги `multilingual-e5-base`, Qdrant, reranker `bge-reranker-v2-m3`, фильтры, генерация через Ollama (`qwen3:8b`), evaluation на 40 вопросах с LLM-судьёй, исследования E1–E9, трассировка и сравнение прогонов в Langfuse (self-hosted) | [lab1/README.md](lab1/README.md) |
 | **Lab2. Микросервисы** | 7 бизнес-сервисов (auth, ingestion, inference, indexing, retrieval, chat, analytics) + API Gateway; REST и события RabbitMQ; БД на сервис в PostgreSQL; JWT; JSON-логи со сквозным request_id; веб-интерфейс (чат с источниками, история, оценки, панель admin); Docker Compose | [lab2/README.md](lab2/README.md) |
 | **Lab3. Docker и Kubernetes** | оптимизированные образы, манифесты Kubernetes (Deployment, StatefulSet, Service, ConfigMap, Secret, PVC, probes, resources), запуск в Minikube, масштабирование и восстановление подов | [lab3/README.md](lab3/README.md) |
 
@@ -38,7 +38,7 @@
 
 ## Технологии
 
-Python 3.12–3.14, FastAPI, sentence-transformers / PyTorch, Qdrant, Ollama, PostgreSQL 17, RabbitMQ 4, SQLAlchemy (async), httpx, PyJWT, pytest, Docker, Docker Compose, Kubernetes (Minikube), kustomize. Почему выбрано именно это, с альтернативами — в README каждой лабораторной (раздел 3).
+Python 3.12–3.14, FastAPI, sentence-transformers / PyTorch, Qdrant, Ollama, Langfuse, PostgreSQL 17, RabbitMQ 4, SQLAlchemy (async), httpx, PyJWT, pytest, Docker, Docker Compose, Kubernetes (Minikube), kustomize. Почему выбрано именно это, с альтернативами — в README каждой лабораторной (раздел 3).
 
 ## Быстрый старт
 
@@ -65,7 +65,7 @@ kubectl apply -k k8s/ && kubectl port-forward -n rag svc/web 8080:8080   # UI: h
 
 | Где | Команда | Тестов |
 |-----|---------|-------:|
-| lab1 | `pytest` | 109 |
+| lab1 | `pytest` | 118 |
 | lab2 | `pytest` (+ `tests/e2e` против запущенной системы) | 97 + 6 e2e |
 | lab3 | `python -m pytest tests` (проверка манифестов) | 32 |
 

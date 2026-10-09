@@ -333,6 +333,44 @@ LLM получает system prompt (`configs/prompts.yaml`) и сообщени�
 
 Почему не RAGAS как библиотека: по умолчанию она рассчитана на OpenAI и тяжёлые зависимости. Свой судья на локальной модели прозрачен и воспроизводим, а faithfulness считает по той же схеме (утверждения → проверка по контексту).
 
+### Наблюдаемость: Langfuse
+Метрики evaluation отвечают на вопрос «насколько хорошо», но не «почему именно такой ответ». Поэтому каждый запуск RAG записывается в [Langfuse](https://langfuse.com) — open-source платформу трассировки LLM-приложений. Сервер поднимается локально (`langfuse/docker-compose.yml`, Langfuse v4), данные никуда не уходят.
+
+Что попадает в Langfuse (`src/tracing.py`, `src/evaluation/langfuse_run.py`):
+
+```text
+trace rag-ask  (вопрос → ответ, источники, отказ, время поиска и генерации)
+├── retrieval        retriever   запрос, итоговые top-K chunks со score, счётчики шагов
+│   ├── vector-search            20 кандидатов: заголовок, url, cosine score, начало текста
+│   ├── filters                  сколько осталось после порога, дублей и длины
+│   └── rerank                   модель reranker, кандидаты с rerank_score
+└── ollama-chat      generation  модель и параметры (temperature, num_ctx, seed, think),
+                                 system + user промпт с контекстом, ответ, токены, время
+```
+
+Прогон evaluation:
+- **session** `eval-<имя прогона>` — все вопросы прогона вместе;
+- **trace на вопрос**: три прохода (поиск → генерация → судья) попадают в один trace. Внутри — те же шаги, что выше, и два вызова судьи (`judge-correctness`, `judge-faithfulness`) с его разбором фактов и утверждений;
+- **scores** trace: `hit@5`, `recall@5`, `precision@5`, `reciprocal_rank`, `refused`, `refusal_correct`, `citation_hit`, `correctness`, `faithfulness`, `claim_support` (с комментарием судьи). Scores session — итоги прогона, те же числа, что в `summary.json`;
+- **dataset** `k8s-docs-eval` — вопросы набора с эталонами (повторный прогон обновляет, а не дублирует), прогон — **experiment** с тем же именем. Прогоны экспериментов (например, `E6/с_reranker` и `E6/без_reranker`) сравниваются бок о бок по средним scores и по каждому вопросу.
+
+Зачем:
+- разбор ошибки за минуту: на «провальном» вопросе видно, на каком шаге пропал нужный документ (не нашёлся, отсечён порогом, опущен reranker'ом) или модель проигнорировала контекст;
+- видна цена каждого шага: время поиска, reranker и LLM, токены промпта и ответа;
+- эксперименты сравниваются не только итоговыми числами, но и по конкретным вопросам.
+
+Трассировка не обязательна. Без ключей в `.env`, без запущенного сервера или при `langfuse.enabled: false` Tracer пустой: пайплайн и тесты работают как раньше, при недоступном сервере — одно предупреждение в логе. Тексты chunks в trace обрезаются до `langfuse.preview_chars`; полный контекст есть в промпте generation.
+
+Почему прогон связан с experiment своим циклом, а не `Langfuse.run_experiment`: run_experiment выполняет задачу целиком на каждом вопросе (и параллельно), а наш прогон идёт в три прохода, чтобы генератор и судья не вытесняли друг друга из видеопамяти. Поэтому связь делается тем же способом, что внутри SDK: item run в dataset и атрибуты experiment на spans вопроса.
+
+| Вариант | Почему выбран / не выбран |
+|---------|---------------------------|
+| **Langfuse** (выбран) | open-source, self-hosted одной командой Docker Compose; traces, sessions, scores, datasets и сравнение experiments в одном UI; SDK на OpenTelemetry |
+| LangSmith | облачный сервис LangChain; self-hosted — только в платной версии |
+| Arize Phoenix | трассировка есть, но datasets и сравнение прогонов слабее |
+| MLflow Tracing | рассчитан на эксперименты ML-моделей; UI для пошаговых traces LLM беднее |
+| только логи и `report.md` | нет дерева шагов и времени по шагам; прогоны сравниваются вручную по файлам |
+
 ## 3. Используемые технологии
 
 | Компонент | Технология |
@@ -344,6 +382,7 @@ LLM получает system prompt (`configs/prompts.yaml`) и сообщени�
 | Vector DB | Qdrant (`qdrant-client`, локальный режим) |
 | Reranker | `sentence-transformers` CrossEncoder, `BAAI/bge-reranker-v2-m3` |
 | LLM | Ollama (HTTP API `/api/chat`), `qwen3:8b`, `gemma3:12b` |
+| Наблюдаемость | Langfuse v4 self-hosted (Docker Compose: web, worker, PostgreSQL, ClickHouse, Redis, MinIO), SDK `langfuse` (OpenTelemetry) |
 | Тесты | `pytest` |
 
 ## 4. Установка
@@ -361,6 +400,13 @@ copy .env.example .env          # необязательно: GITHUB_TOKEN
 ollama pull qwen3:8b
 ollama pull gemma3:12b   # LLM-судья в evaluation и вторая модель в E8
 ```
+
+Langfuse (необязательно; нужен Docker, ≈2 ГБ образов и ≈1.5 ГБ памяти):
+```bash
+python langfuse/make_env.py                          # случайные пароли → langfuse/.env, ключи API → .env
+docker compose -f langfuse/docker-compose.yml up -d  # после скачивания образов готов за ≈30 с
+```
+UI: http://localhost:3000. Вход: `admin@lab1.local` и пароль `LANGFUSE_INIT_USER_PASSWORD` из `langfuse/.env`. Организация, проект `lab1-rag` и его ключи API создаются при первом запуске сами, регистрация посторонних выключена. Остановить: `docker compose -f langfuse/docker-compose.yml stop` (данные остаются в томах).
 
 ## 5. Запуск
 
@@ -428,6 +474,20 @@ python -m src.evaluation.experiments --only E8,E9    # эксперименты 
 ```
 Недостающие индексы Qdrant строятся автоматически. Одинаковый вариант в разных экспериментах прогоняется один раз. Итог — `experiments/results/<E>/comparison.md`.
 
+### Langfuse: трассировка и сравнение прогонов
+Когда Langfuse запущен (раздел 4), трассировка включается сама, команды те же:
+```bash
+python -m src.generation "Как ограничить потребление памяти контейнером?"   # trace вопроса, ссылка в конце вывода
+python -m src.evaluation --name baseline                                     # session, 40 trace, scores, experiment
+python -m src.evaluation.experiments --only E6                               # два experiment: с reranker и без
+```
+Где смотреть (http://localhost:3000, проект `lab1-rag`):
+- **Tracing** — каждый вопрос: дерево шагов, время, промпт и ответ LLM, токены, scores;
+- **Sessions** — прогон evaluation целиком (`eval-<имя прогона>`);
+- **Experiments** — прогоны рядом со средними scores (hit@5, recall@5, reciprocal_rank, correctness, faithfulness…); внутри прогона — результат по каждому вопросу и сравнение с другим прогоном;
+- **Datasets → k8s-docs-eval** — вопросы с эталонами и их прогоны;
+- **Scores**, **Dashboards** — распределение оценок, задержки и токены.
+
 Как не ждать полный прогон:
 - эксперименты с поиском (E1–E7) — с `--retrieval-only`: без LLM, секунды на прогон;
 - настройка промптов судьи — сначала калибровка, затем `--rejudge`: генерация не повторяется;
@@ -439,7 +499,7 @@ python -m src.generation "Как ограничить потребление п�
 python -m src.generation "Чем Deployment отличается от StatefulSet?" --llm gemma3-12b
 python -m src.generation "Что такое Pod?" --prompt basic --show-context
 ```
-Выводит ответ, источники и служебную строку: шаги поиска, время, токены, признак отказа. Первый вопрос после запуска Ollama дольше, потому что модель загружается в видеопамять.
+Выводит ответ, источники и служебную строку: шаги поиска, время, токены, признак отказа. Если Langfuse запущен, последней строкой выводится ссылка на trace этого вопроса. Первый вопрос после запуска Ollama дольше, потому что модель загружается в видеопамять.
 Параметры модели и chunking (`--model`, `--strategy`, …) выбирают коллекцию, поэтому должны совпадать с теми, что использовались при индексации.
 
 ## 6. Configuration
@@ -494,7 +554,15 @@ python -m src.generation "Что такое Pod?" --prompt basic --show-context
 | `evaluation.k_values` | `[1, 3, 5, 10, 20]` | K для метрик retrieval |
 | `evaluation.judge_llm` | `gemma3-12b-judge` | LLM-судья (ключ из `llm.models`) |
 | `evaluation.judge_prompts` | `judge_correctness`, `judge_faithfulness` | промпты судьи из `configs/prompts.yaml` |
+| `evaluation.langfuse_dataset` | `k8s-docs-eval` | dataset вопросов в Langfuse; прогон — experiment |
 | `evaluation.log_file` | `logs/evaluation.log` | лог прогонов |
+| `langfuse.enabled` | `true` | трассировка в Langfuse; без ключей в `.env` выключается сама |
+| `langfuse.base_url` | `http://localhost:3000` | адрес self-hosted Langfuse |
+| `langfuse.environment` | `lab1` | окружение в Langfuse (фильтр в UI) |
+| `langfuse.sample_rate` | `1.0` | доля трассируемых запросов |
+| `langfuse.timeout_s` | `5` | таймаут запросов к Langfuse |
+| `langfuse.preview_chars` | `300` | сколько символов chunk записывать в trace |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (`.env`) | — | ключи API проекта; заполняет `langfuse/make_env.py`, пароли сервера — в `langfuse/.env` |
 
 ## 7. API
 HTTP API в Lab1 нет: система — набор CLI-модулей и Python-пакет `src`. HTTP API с OpenAPI появляется в Lab2, где эти модули становятся сервисами.
@@ -523,6 +591,7 @@ try:
     print(result.answer.text)                   # ответ со ссылками [n]
     print(result.answer.sources)                # [{"n", "title", "heading", "url", "document_id"}]
     print(result.answer.refused, result.stages) # признак отказа; сколько chunks осталось после каждого шага
+    print(result.trace_id)                      # trace в Langfuse; None, если трассировка выключена
 finally:
     client.close()                              # Qdrant в локальном режиме держит блокировку папки
 ```
@@ -578,7 +647,7 @@ Score у e5 сжат в диапазон 0.7–0.9. Порог `0.2` из old/ �
 
 ## 9. Тестирование
 ```bash
-pytest          # 109 тестов, ≈2 с: без сети, GPU и Ollama (модели и источник подменены заглушками);
+pytest          # 118 тестов, ≈2 с: без сети, GPU, Ollama и Langfuse (всё подменено заглушками);
                 # сверка набора вопросов с корпусом пропускается, пока корпус не собран
 ```
 Установка из `requirements.txt` проверена в чистом venv (Python 3.14): `pip check` без ошибок, все тесты проходят.
@@ -647,6 +716,12 @@ pytest          # 109 тестов, ≈2 с: без сети, GPU и Ollama (м�
 - сохранённый прогон перезапускается судьёй без генерации (`--rejudge`);
 - согласие с экспертной разметкой и корректность самой разметки;
 - сводку по типам и отчёт.
+
+`tests/test_tracing.py`: вместо Langfuse — заглушка клиента, которая повторяет вложенность наблюдений. Проверяет:
+- без ключей или при `enabled: false` трассировка выключена, пустой Tracer ничего не делает;
+- trace `rag-ask`: шаги retrieval (vector-search → filters → rerank), generation с моделью, параметрами, промптом и токенами; отказ без контекста — без generation;
+- прогон evaluation: три прохода вопроса в одном trace, session и имена в ASCII, шаги судьи, scores вопросов и прогона, items dataset и привязка trace к experiment на всех проходах.
+- сбой API Langfuse посреди прогона не роняет evaluation: traces пишутся дальше, без experiment.
 
 ## 10. Результаты экспериментов
 
@@ -862,6 +937,18 @@ Correctness по типам вопросов:
   - без требования ссылок ответ нельзя связать с источником: система показывает все 5 chunks. Поэтому citation hit у `basic` формально выше (0.969) и при этом ничего не значит;
   - ответы в 3.3 раза длиннее, генерация в 2.5 раза дольше.
 - **Выбор:** `strict`.
+
+### Langfuse: проверка вживую (2026-10-09)
+Langfuse v4.55 в Docker Compose, SDK 4.17; RTX 4070 Ti, Ollama на той же машине.
+
+| Что | Результат |
+|-----|-----------|
+| `python -m src.generation "Как ограничить потребление памяти контейнером?"` | ссылка на trace в выводе; в UI дерево: `rag-ask` 9.2 с → `retrieval` 0.73 с (`vector-search` 0.46, `filters` 0.00, `rerank` 0.27) → `ollama-chat` 8.4 с, `qwen3:8b`, 1326 + 108 токенов, промпт с контекстом и ответ |
+| `--name lf-no-rerank --no-rerank --retrieval-only` (52 с) | experiment из 40 trace: hit@5 0.97, recall@5 0.94, RR 0.88 — как E6 «без reranker» |
+| `--name lf-baseline` (7 мин: поиск, генерация, судья) | experiment из 40 trace, в каждом — 3 прохода и 2 вызова судьи; средние scores: hit@5 0.97, recall@5 0.97, RR 0.90, correctness 0.81, faithfulness 0.97, claim_support 0.99, citation hit 0.94, refusal_correct 40/40 |
+| сравнение в Experiments | два прогона в одной таблице: reranker поднимает recall@5 с 0.94 до 0.97 и RR с 0.88 до 0.90; открыв прогон, видно, на каких вопросах |
+
+Correctness 0.81 против 0.77 в итоговом прогоне раздела 11 при той же конфигурации: генерация и судья на GPU не полностью детерминированы даже с фиксированным seed, разница — 1–2 вопроса (раздел 11, «ограничения оценки»). Метрики поиска совпали точно.
 
 ## 11. Выводы
 
